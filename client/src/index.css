@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  /* Your colors from the previous step */
+  --color-surface: #080c14;
+  --color-surface-card: #0d1220;
+  --color-surface-border: #1a2235;
+  --color-surface-hover: #111827;
+
+  --color-accent: #3b82f6;
+  --color-accent-dim: #1d4ed8;
+  --color-accent-glow: rgba(59, 130, 246, 0.15);
+
+  --color-ink-primary: #e2e8f0;
+  --color-ink-secondary: #64748b;
+  --color-ink-muted: #334155;
+
+  /* Your animations from the previous step */
+  --animate-fade-up: fade-up 0.5s ease both;
+  --animate-fade-up-2: fade-up 0.5s ease 0.1s both;
+  --animate-fade-up-3: fade-up 0.5s ease 0.2s both;
+  --animate-fade-up-4: fade-up 0.5s ease 0.3s both;
+  --animate-blink: pulse2 1.2s ease-in-out infinite;
+  --animate-scanline: scanline 8s linear infinite;
+
+  @keyframes fade-up {
+    0% { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse2 {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+}
+
+/* ── Custom Utilities for your Login Page ────────────────────────────────── */
+
+@utility dot-grid {
+  background-image: radial-gradient(var(--color-surface-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@utility card-glow {
+  box-shadow: 0 0 40px -10px rgba(0, 0, 0, 0.5), 
+              inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-surface-border);
+}
+
+@utility input-focus {
+  @apply bg-surface border border-surface-border text-ink-primary transition-all duration-200;
+  @apply focus:outline-none focus:border-accent/50 focus:ring-4 focus:ring-accent/5;
+}

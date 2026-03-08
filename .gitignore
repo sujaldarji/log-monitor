@@ -1,0 +1,16 @@
+# Dependencies
+client/node_modules/
+server/node_modules/
+
+# Environment — contains secrets
+server/.env
+
+# Sensitive data
+server/users.json
+
+
+# React build output
+client/dist/
+
+# Vite cache
+client/.vite/
