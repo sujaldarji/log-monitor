@@ -64,6 +64,12 @@ app.use('/api/logs',  requireAuth, logsRoutes)
 // ── 404 fallback ───────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }))
 
+
+// Kibana URL — keeps infrastructure URL in .env, not hardcoded in frontend
+app.get('/api/config/kibana-url', requireAuth, (_req, res) => {
+  res.json({ url: process.env.KIBANA_URL || null })
+})
+
 app.listen(PORT, () => {
   console.log(`\n   Log Monitor API → http://localhost:${PORT}`)
   console.log(`   CORS origin : ${CLIENT_ORIGIN}`)

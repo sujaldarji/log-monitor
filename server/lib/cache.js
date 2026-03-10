@@ -1,17 +1,14 @@
 /**
- * Simple in-memory cache for dashboard stat endpoints.
- * Avoids hammering Elasticsearch on every 30s chart refresh.
- * TTL is read from ENV (default 30 seconds).
+ * Simple in-memory TTL cache.
+ * Default TTL: 30s (CACHE_TTL_MS env var)
+ * Custom TTL: pass as third argument to set()
  */
 
-const TTL = parseInt(process.env.CACHE_TTL_MS, 10) || 30_000
+const DEFAULT_TTL = parseInt(process.env.CACHE_TTL_MS, 10) || 30_000
 
 const store = new Map()
 
-/**
- * Get a cached value by key.
- * Returns null if missing or expired.
- */
+// Get cached value — returns null if missing or expired
 const get = (key) => {
   const entry = store.get(key)
   if (!entry) return null
@@ -22,13 +19,11 @@ const get = (key) => {
   return entry.value
 }
 
-/**
- * Store a value with TTL.
- */
-const set = (key, value) => {
+// Set value with optional custom TTL in ms
+const set = (key, value, ttl = DEFAULT_TTL) => {
   store.set(key, {
     value,
-    expiresAt: Date.now() + TTL,
+    expiresAt: Date.now() + ttl,
   })
 }
 
