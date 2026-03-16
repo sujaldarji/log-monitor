@@ -49,26 +49,42 @@ const requireAuth = (req, res, next) => {
   }
 }
 
+// ── Role middleware — call after requireAuth ───────────────────────────────
+// Usage: requireRole('admin') or requireRole('admin', 'user')
+// Returns 403 if the user's role is not in the allowed list.
+const requireRole = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) {
+    return res.status(403).json({
+      error:    'Access denied.',
+      required: roles,
+      current:  req.user?.role || 'none',
+    })
+  }
+  next()
+}
+ 
 // ── Routes ─────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes)
-
-// Validate session — frontend calls this on app load to check if cookie is still valid
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ username: req.user.username })
-})
-
-// Placeholder protected routes — filled in during Dashboard/Explorer steps
+app.use('/api/auth',  authRoutes)
 app.use('/api/stats', requireAuth, statsRoutes)
-app.use('/api/logs',  requireAuth, logsRoutes)
-
-// ── 404 fallback ───────────────────────────────────────────────────────────
-app.use((_req, res) => res.status(404).json({ error: 'Not found' }))
-
-
-// Kibana URL — keeps infrastructure URL in .env, not hardcoded in frontend
+app.use('/api/logs',  requireAuth, requireRole('admin'), logsRoutes)
+ 
+// Session check — returns username + role for frontend Zustand store
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ username: req.user.username, role: req.user.role })
+})
+ 
+// Kibana URL — keeps infrastructure URL server-side only
 app.get('/api/config/kibana-url', requireAuth, (_req, res) => {
   res.json({ url: process.env.KIBANA_URL || null })
 })
+
+// ── Example of role-protected route (ready for future use) ─────────────────
+// app.get('/api/admin/users', requireAuth, requireRole('admin'), (req, res) => {
+//   res.json({ message: 'admin only' })
+// })
+ 
+// ── 404 ────────────────────────────────────────────────────────────────────
+app.use((_req, res) => res.status(404).json({ error: 'Not found' }))
 
 app.listen(PORT, () => {
   console.log(`\n   Log Monitor API → http://localhost:${PORT}`)

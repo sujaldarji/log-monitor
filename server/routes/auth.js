@@ -48,9 +48,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials.' })
     }
 
+    // Default to 'user' role if not set in users.json
+    const role = user.role || 'user'
+
     // Sign token
     const token = jwt.sign(
-      { username: user.username },
+      { username: user.username, role },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     )
@@ -59,7 +62,7 @@ router.post('/login', async (req, res) => {
     res.cookie('lm_token', token, COOKIE_OPTIONS)
 
     // Return only non-sensitive data in the body
-    return res.json({ username: user.username })
+    return res.json({ username: user.username, role })
 
   } catch (err) {
     console.error('[AUTH] Login error:', err.message)

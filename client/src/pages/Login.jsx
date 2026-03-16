@@ -26,7 +26,7 @@ export default function Login() {
   const [error,    setError]    = useState('')
 
   // ── Global UI preferences ───────────────────────────────────────────────
-  const { isDark, snowfall } = useUIStore()
+  const { isDark, snowfall, setRole } = useUIStore()
 
   // ── Login handler ───────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
@@ -49,6 +49,7 @@ export default function Login() {
       // Token is now stored in an httpOnly cookie (not accessible to JS).
       // Only store the display name for the UI.
       localStorage.setItem('lm_username', data.username)
+      setRole(data.role)   // store role in Zustand for UI decisions
 
       navigate('/dashboard')
     } catch (err) {

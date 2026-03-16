@@ -15,6 +15,13 @@ export const useUIStore = create(
       // ── Snowfall ────────────────────────────────────────────────────────
       snowfall: false,
       toggleSnowfall: () => set((s) => ({ snowfall: !s.snowfall })),
+
+       // ── Auth ──────────────────────────────────────────────────────────────
+      // Role is set on login and cleared on logout.
+      // Source of truth is the JWT cookie — this is just for UI decisions.
+      role: null,
+      setRole: (role) => set({ role }),
+      clearRole: () => set({ role: null }),
     }),
     {
       name: 'lm-ui-prefs', // localStorage key
