@@ -208,13 +208,59 @@ router.get('/top-sources', async (_req, res) => {
 
 
 // ── Mock data for new charts ───────────────────────────────────────────────
-const getMockTopEvents = () => [
-  { eventid: 4624, count: 13420 },
-  { eventid: 4625, count: 8920  },
-  { eventid: 4634, count: 3000  },
-  { eventid: 4672, count: 2000  },
-  { eventid: 4720, count: 1200  },
+const getMockTopChannels = () => [
+  { channel: 'Security',    count: 13420 },
+  { channel: 'System',      count: 8920  },
+  { channel: 'Application', count: 3000  },
+  { channel: 'Setup',       count: 2000  },
+  { channel: 'ForwardedEvents', count: 1200 },
 ]
+// ── GET /api/stats/top-channels ────────────────────────────────────────────
+// Top 5 Windows channels by volume in the last 15 minutes
+router.get('/top-channels', async (_req, res) => {
+  if (MOCK) return res.json({ data: getMockTopChannels() })
+ 
+  const cacheKey = 'stats:top-channels'
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getLast15Min()
+    const index         = getIndices(from, now)
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: {
+        range: {
+          '@timestamp': { gte: from, lte: now, format: 'epoch_millis' }
+        }
+      },
+      aggs: {
+        top_channels: {
+          terms: {
+            field: 'channel',
+            size:  5,
+          }
+        }
+      }
+    })
+ 
+    const buckets = result.aggregations.top_channels.buckets
+    const payload = {
+      data: buckets.map(b => ({
+        channel: b.key,
+        count:   b.doc_count,
+      }))
+    }
+ 
+    cache.set(cacheKey, payload)
+    res.json(payload)
+ 
+  } catch (err) {
+    console.error('[STATS] top-channels error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch top channels.' })
+  }
+})
 
 const getMockIndexSize = () => {
   const days = 10
@@ -228,53 +274,6 @@ const getMockIndexSize = () => {
     }
   })
 }
-
-// ── GET /api/stats/top-events ──────────────────────────────────────────────
-// Top 5 Windows event IDs by volume in the last 15 minutes
-router.get('/top-events', async (_req, res) => {
-  if (MOCK) return res.json({ data: getMockTopEvents() })
-
-  const cacheKey = 'stats:top-events'
-  const cached   = cache.get(cacheKey)
-  if (cached) return res.json(cached)
-
-  try {
-    const { now, from } = getLast15Min()
-    const index         = getIndices(from, now)
-
-    const result = await esAgg(index, {
-      size: 0,
-      query: {
-        range: {
-          '@timestamp': { gte: from, lte: now, format: 'epoch_millis' }
-        }
-      },
-      aggs: {
-        top_events: {
-          terms: {
-            field: 'eventid',
-            size:  5,
-          }
-        }
-      }
-    })
-
-    const buckets = result.aggregations.top_events.buckets
-    const payload = {
-      data: buckets.map(b => ({
-        eventid: b.key,
-        count:   b.doc_count,
-      }))
-    }
-
-    cache.set(cacheKey, payload)
-    res.json(payload)
-
-  } catch (err) {
-    console.error('[STATS] top-events error:', err.message)
-    res.status(500).json({ error: 'Failed to fetch top events.' })
-  }
-})
 
 // ── GET /api/stats/index-size ──────────────────────────────────────────────
 // Daily index sizes for last 10 days using _cat/indices API.

@@ -1,19 +1,18 @@
-import { useState }        from 'react'
-import { useNavigate }     from 'react-router-dom'
-import axios               from 'axios'
-import Snowfall            from 'react-snowfall'
-import clsx                from 'clsx'
+import { useState }       from 'react'
+import { useNavigate }    from 'react-router-dom'
+import api             from '../lib/axios'
+import Snowfall           from 'react-snowfall'
+import clsx               from 'clsx'
 
-// MUI Icons — replaces all inline SVGs
-import PersonOutlineIcon   from '@mui/icons-material/PersonOutline'
-import LockOutlinedIcon    from '@mui/icons-material/LockOutlined'
-import VisibilityIcon      from '@mui/icons-material/Visibility'
-import VisibilityOffIcon   from '@mui/icons-material/VisibilityOff'
-import WarningAmberIcon    from '@mui/icons-material/WarningAmber'
-import EastIcon            from '@mui/icons-material/East'
+import PersonOutlineIcon  from '@mui/icons-material/PersonOutline'
+import LockOutlinedIcon   from '@mui/icons-material/LockOutlined'
+import VisibilityIcon     from '@mui/icons-material/Visibility'
+import VisibilityOffIcon  from '@mui/icons-material/VisibilityOff'
+import WarningAmberIcon   from '@mui/icons-material/WarningAmber'
+import EastIcon           from '@mui/icons-material/East'
 
-import SettingsPanel       from '../components/Settingspanel'
-import { useUIStore }      from '../store/uistore'
+import SettingsPanel      from '../components/SettingsPanel'
+import { useUIStore }     from '../store/uistore'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -40,11 +39,7 @@ export default function Login() {
 
     setLoading(true)
     try {
-      const { data } = await axios.post(
-        '/api/auth/login',
-        { username, password },
-        { withCredentials: true }   // required — tells browser to accept the Set-Cookie header
-      )
+      const { data } = await api.post('/auth/login', { username, password })
 
       // Token is now stored in an httpOnly cookie (not accessible to JS).
       // Only store the display name for the UI.
@@ -66,7 +61,7 @@ export default function Login() {
       isDark ? 'bg-surface' : 'bg-gray-100'
     )}>
 
-      {/* ── Snowfall (toggled via SettingsPanel) ──────────────────────── */}
+      {/* ── Snowfall ──────────────────────────────────────────────────────── */}
       {snowfall && (
         <Snowfall
           snowflakeCount={120}
@@ -75,15 +70,15 @@ export default function Login() {
         />
       )}
 
-      {/* ── Dot grid background (dark mode only) ──────────────────────── */}
+      {/* ── Dot grid (dark only) ──────────────────────────────────────────── */}
       {isDark && <div className="absolute inset-0 dot-grid opacity-50" />}
 
-      {/* ── Animated scanline sweep ───────────────────────────────────── */}
+      {/* ── Scanline sweep (dark only) ────────────────────────────────────── */}
       {isDark && (
         <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent animate-scanline pointer-events-none" />
       )}
 
-      {/* ── Corner accent lines (dark mode only) ──────────────────────── */}
+      {/* ── Corner accents (dark only) ────────────────────────────────────── */}
       {isDark && (
         <>
           <div className="absolute top-0 left-0 w-24 h-24 border-l-2 border-t-2 border-accent/20" />
@@ -91,28 +86,41 @@ export default function Login() {
         </>
       )}
 
-      
+      {/* ── System status (top-right) ─────────────────────────────────────── */}
+      <div className="absolute top-4 right-6 flex items-center gap-2 animate-fade-up">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-blink" />
+        <span className={clsx(
+          'text-xs font-mono tracking-widest uppercase',
+          isDark ? 'text-ink-secondary' : 'text-gray-400'
+        )}>
+          System Online
+        </span>
+      </div>
 
-      {/* ── Login card ────────────────────────────────────────────────── */}
-      <div className="relative z-10 w-full max-w-sm mx-4">
+      {/* ── Card ──────────────────────────────────────────────────────────── */}
+      <div className="relative z-10 w-full max-w-md mx-4">
 
-        {/* Page heading */}
+        {/* Heading */}
         <div className="mb-8 animate-fade-up">
           <h1 className={clsx(
-            'text-2xl font-semibold leading-tight tracking-tight',
+            'text-3xl font-semibold leading-tight tracking-tight',
             isDark ? 'text-ink-primary' : 'text-gray-800'
           )}>
             Centralized Log<br />
             <span className="text-accent">Monitoring</span> Platform
           </h1>
+          <p className={clsx(
+            'mt-2 text-base',
+            isDark ? 'text-ink-secondary' : 'text-gray-500'
+          )}>
+            Authenticate to access the observability console.
+          </p>
         </div>
 
-        {/* Card container */}
+        {/* Form card */}
         <div className={clsx(
           'rounded-sm p-7 animate-fade-up-2',
-          isDark
-            ? 'bg-surface-card card-glow'
-            : 'bg-white shadow-lg border border-gray-200'
+          isDark ? 'bg-surface-card card-glow' : 'bg-white shadow-lg border border-gray-200'
         )}>
 
           {/* Error banner */}
@@ -126,10 +134,10 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
-            {/* ── Username field ─────────────────────────────────────── */}
+            {/* Username */}
             <div className="animate-fade-up-3">
               <label className={clsx(
-                'block text-xs font-mono tracking-widest uppercase mb-2',
+                'block text-sm font-mono tracking-widest uppercase mb-2',
                 isDark ? 'text-ink-secondary' : 'text-gray-500'
               )}>
                 Username
@@ -145,7 +153,7 @@ export default function Login() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="user"
+                  placeholder="admin"
                   className={clsx(
                     'input-focus w-full pl-9 pr-3.5 py-2.5 rounded-sm text-sm font-mono',
                     !isDark && 'border-gray-200 bg-gray-50 text-gray-800 placeholder-gray-400'
@@ -154,10 +162,10 @@ export default function Login() {
               </div>
             </div>
 
-            {/* ── Password field ─────────────────────────────────────── */}
+            {/* Password */}
             <div className="animate-fade-up-3">
               <label className={clsx(
-                'block text-xs font-mono tracking-widest uppercase mb-2',
+                'block text-sm font-mono tracking-widest uppercase mb-2',
                 isDark ? 'text-ink-secondary' : 'text-gray-500'
               )}>
                 Password
@@ -179,15 +187,12 @@ export default function Login() {
                     !isDark && 'border-gray-200 bg-gray-50 text-gray-800 placeholder-gray-400'
                   )}
                 />
-                {/* Show / hide password toggle */}
                 <button
                   type="button"
                   onClick={() => setShowPass((p) => !p)}
                   className={clsx(
                     'absolute right-3 top-1/2 -translate-y-1/2 transition-colors',
-                    isDark
-                      ? 'text-ink-muted hover:text-ink-secondary'
-                      : 'text-gray-400 hover:text-gray-600'
+                    isDark ? 'text-ink-muted hover:text-ink-secondary' : 'text-gray-400 hover:text-gray-600'
                   )}
                   tabIndex={-1}
                   aria-label={showPass ? 'Hide password' : 'Show password'}
@@ -200,7 +205,7 @@ export default function Login() {
               </div>
             </div>
 
-            {/* ── Submit button ──────────────────────────────────────── */}
+            {/* Submit */}
             <div className="animate-fade-up-4 pt-1">
               <button
                 type="submit"
@@ -227,9 +232,18 @@ export default function Login() {
 
           </form>
         </div>
+
+        {/* Footer */}
+        <div className={clsx(
+          'mt-4 flex justify-between text-sm font-mono animate-fade-up-4',
+          isDark ? 'text-ink-muted' : 'text-gray-400'
+        )}>
+          <span>Internal use only</span>
+          <span>JWT · 8h session</span>
+        </div>
       </div>
 
-      {/* ── Floating settings panel (reused on every page) ────────────── */}
+      {/* ── Floating settings (every page) ────────────────────────────────── */}
       <SettingsPanel />
 
     </div>

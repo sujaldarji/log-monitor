@@ -4,7 +4,7 @@ import LightModeIcon  from '@mui/icons-material/LightMode'
 import DarkModeIcon   from '@mui/icons-material/DarkMode'
 import AcUnitIcon     from '@mui/icons-material/AcUnit'          // snowflake
 import CloseIcon      from '@mui/icons-material/Close'
-import { useUIStore } from '../store/uistore'
+import { useUIStore } from '../store/uiStore'
 import clsx           from 'clsx'
 
 /**
@@ -50,7 +50,7 @@ export default function SettingsPanel() {
 
           {/* Popover header */}
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-mono tracking-widest uppercase opacity-60">
+            <span className="text-sm font-mono tracking-widest uppercase opacity-60">
               Preferences
             </span>
             <button
@@ -126,7 +126,7 @@ function ToggleRow({ isDark, icon, label, active, onToggle }) {
     >
       <span className="flex items-center gap-2.5 opacity-80">
         {icon}
-        <span className="font-mono text-xs">{label}</span>
+        <span className="font-mono text-sm">{label}</span>
       </span>
 
       {/* Pill toggle */}
