@@ -21,9 +21,10 @@ import TopChannelsChart from '../components/dashboard/TopChannelsChart'
 import IndexSizeChart   from '../components/dashboard/IndexSizeChart'
 
 // Phase 2: MetricsStrip  ✅
-import MetricsStrip   from '../components/dashboard/MetricsStrip'
-// Phase 3: RecentLogs    → import RecentLogsTable from '../components/dashboard/RecentLogsTable'
-// Phase 4: InsightsPanel → import InsightsPanel  from '../components/dashboard/InsightsPanel'
+import MetricsStrip      from '../components/dashboard/MetricsStrip'
+// Phase 3: RecentLogs   ✅
+import RecentLogsTable   from '../components/dashboard/RecentLogsTable'
+// Phase 4: InsightsPanel → import InsightsPanel from '../components/dashboard/InsightsPanel'
 
 const REFRESH_INTERVAL = 30_000
 
@@ -40,7 +41,8 @@ export default function Dashboard() {
   const [topChannels, setTopChannels] = useState(initState)
   const [indexSize,   setIndexSize]   = useState(initState)
 
-  const [summary,     setSummary]     = useState({ data: null, loading: true, error: null })
+  const [summary,     setSummary]     = useState({ data: null,  loading: true, error: null })
+  const [recentLogs,  setRecentLogs]  = useState({ data: [],   loading: true, error: null })
   const [lastRefresh, setLastRefresh] = useState(null)
   const [kibanaUrl,   setKibanaUrl]   = useState(null)
 
@@ -60,14 +62,16 @@ export default function Dashboard() {
     setTopChannels(s => ({ ...s, ...loading }))
     setIndexSize(s   => ({ ...s, ...loading }))
     setSummary(s     => ({ ...s, ...loading }))
+    setRecentLogs(s  => ({ ...s, ...loading }))
 
-    const [lr, err, ts, tc, is, sm] = await Promise.allSettled([
-      api.get('/stats/log-rate',     { params: { range: timeRange } }),  // Step 1.2 ✅
-      api.get('/stats/errors',       { params: { range: timeRange } }),  // Step 1.2 ✅
-      api.get('/stats/top-sources',  { params: { range: timeRange } }),  // Step 1.2 ✅
-      api.get('/stats/top-channels', { params: { range: timeRange } }),  // Step 1.2 ✅
-      api.get('/stats/index-size'),                                       // fixed — not range-dependent
-      api.get('/stats/summary',      { params: { range: timeRange } }),  // Phase 3 ✅
+    const [lr, err, ts, tc, is, sm, rl] = await Promise.allSettled([
+      api.get('/stats/log-rate',     { params: { range: timeRange } }),
+      api.get('/stats/errors',       { params: { range: timeRange } }),
+      api.get('/stats/top-sources',  { params: { range: timeRange } }),
+      api.get('/stats/top-channels', { params: { range: timeRange } }),
+      api.get('/stats/index-size'),
+      api.get('/stats/summary',      { params: { range: timeRange } }),
+      api.get('/logs/recent',        { params: { range: timeRange, limit: 10, severity: 'error,critical' } }),
     ])
 
     const resolve = (r) => ({
@@ -81,13 +85,14 @@ export default function Dashboard() {
     setTopSources(resolve(ts))
     setTopChannels(resolve(tc))
     setIndexSize(resolve(is))
+    setRecentLogs(resolve(rl))
     setSummary({
       data:    sm.status === 'fulfilled' ? sm.value.data.data : null,
       loading: false,
       error:   sm.status === 'rejected'  ? 'Failed to load' : null,
     })
     setLastRefresh(new Date())
-  }, [timeRange])   // Step 1.2 ✅ — refetch whenever range changes
+  }, [timeRange])
 
   // Kibana URL — fetched once, not affected by time range
   useEffect(() => {
@@ -240,7 +245,7 @@ export default function Dashboard() {
         </div>
 
         {/* Phase 3 ✅ — key metrics strip, respects timeRange */}
-        <MetricsStrip isDark={isDark} data={summary.data} loading={summary.loading} />
+        <MetricsStrip isDark={isDark} data={summary.data} loading={summary.loading} timeRange={timeRange} />
 
         {/* ── Row 1: Log Rate + Errors ──────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
@@ -254,7 +259,16 @@ export default function Dashboard() {
           <TopChannelsChart isDark={isDark} {...topChannels} timeRange={timeRange} />
         </div>
 
-        {/* Phase 4: <RecentLogsTable isDark={isDark} /> goes here */}
+        {/* Phase 4 ✅ — recent errors/critical table, between charts and index size */}
+        <div className="mb-4 xl:mb-6">
+          <RecentLogsTable
+            isDark={isDark}
+            data={recentLogs.data}
+            loading={recentLogs.loading}
+            error={recentLogs.error}
+            timeRange={timeRange}
+          />
+        </div>
 
         {/* Phase 5: <InsightsPanel isDark={isDark} /> goes here */}
 
