@@ -273,7 +273,58 @@ router.get('/top-channels', async (req, res) => {
   }
 })
 
-// ── GET /api/stats/index-size — fixed, NOT range-dependent ────────────────
+// ── GET /api/stats/summary ─────────────────────────────────────────────────
+// Key metrics strip — total logs, errors, unique hosts, top event id
+router.get('/summary', async (req, res) => {
+  const range = req.query.range || '15m'
+
+  if (MOCK) return res.json({
+    data: {
+      totalLogs:   12430,
+      errorCount:  324,
+      uniqueHosts: 8,
+      topEventId:  4625,
+    }
+  })
+
+  const cacheKey = `stats:summary:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+
+    const result = await esAgg(index, {
+      size: 0,
+      query: { bool: { filter: [{ range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } }] } },
+      aggs: {
+        error_count:  { filter: { term: { event_id: 4625 } } },
+        unique_hosts: { cardinality: { field: 'hostname' } },
+        top_event_id: { terms: { field: 'event_id', size: 1 } }
+      }
+    })
+
+    const aggs   = result.aggregations
+    const payload = {
+      data: {
+        totalLogs:   result.hits.total.value,
+        errorCount:  aggs.error_count.doc_count,
+        uniqueHosts: aggs.unique_hosts.value,
+        topEventId:  aggs.top_event_id.buckets[0]?.key ?? null,
+      }
+    }
+
+    cache.set(cacheKey, payload)
+    res.json(payload)
+
+  } catch (err) {
+    console.error('[STATS] summary error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch summary.' })
+  }
+})
+
+
 const INDEX_SIZE_CACHE_TTL = 5 * 60 * 1000
 const INDEX_SIZE_DAYS      = 10
 

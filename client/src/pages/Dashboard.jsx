@@ -20,7 +20,8 @@ import TopSourcesChart  from '../components/dashboard/TopSourcesChart'
 import TopChannelsChart from '../components/dashboard/TopChannelsChart'
 import IndexSizeChart   from '../components/dashboard/IndexSizeChart'
 
-// Phase 2: MetricsStrip  → import MetricsStrip  from '../components/dashboard/MetricsStrip'
+// Phase 2: MetricsStrip  ✅
+import MetricsStrip   from '../components/dashboard/MetricsStrip'
 // Phase 3: RecentLogs    → import RecentLogsTable from '../components/dashboard/RecentLogsTable'
 // Phase 4: InsightsPanel → import InsightsPanel  from '../components/dashboard/InsightsPanel'
 
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [topChannels, setTopChannels] = useState(initState)
   const [indexSize,   setIndexSize]   = useState(initState)
 
+  const [summary,     setSummary]     = useState({ data: null, loading: true, error: null })
   const [lastRefresh, setLastRefresh] = useState(null)
   const [kibanaUrl,   setKibanaUrl]   = useState(null)
 
@@ -57,13 +59,15 @@ export default function Dashboard() {
     setTopSources(s  => ({ ...s, ...loading }))
     setTopChannels(s => ({ ...s, ...loading }))
     setIndexSize(s   => ({ ...s, ...loading }))
+    setSummary(s     => ({ ...s, ...loading }))
 
-    const [lr, err, ts, tc, is] = await Promise.allSettled([
+    const [lr, err, ts, tc, is, sm] = await Promise.allSettled([
       api.get('/stats/log-rate',     { params: { range: timeRange } }),  // Step 1.2 ✅
       api.get('/stats/errors',       { params: { range: timeRange } }),  // Step 1.2 ✅
       api.get('/stats/top-sources',  { params: { range: timeRange } }),  // Step 1.2 ✅
       api.get('/stats/top-channels', { params: { range: timeRange } }),  // Step 1.2 ✅
       api.get('/stats/index-size'),                                       // fixed — not range-dependent
+      api.get('/stats/summary',      { params: { range: timeRange } }),  // Phase 3 ✅
     ])
 
     const resolve = (r) => ({
@@ -77,6 +81,11 @@ export default function Dashboard() {
     setTopSources(resolve(ts))
     setTopChannels(resolve(tc))
     setIndexSize(resolve(is))
+    setSummary({
+      data:    sm.status === 'fulfilled' ? sm.value.data.data : null,
+      loading: false,
+      error:   sm.status === 'rejected'  ? 'Failed to load' : null,
+    })
     setLastRefresh(new Date())
   }, [timeRange])   // Step 1.2 ✅ — refetch whenever range changes
 
@@ -230,7 +239,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Phase 3: <MetricsStrip isDark={isDark} /> goes here */}
+        {/* Phase 3 ✅ — key metrics strip, respects timeRange */}
+        <MetricsStrip isDark={isDark} data={summary.data} loading={summary.loading} />
 
         {/* ── Row 1: Log Rate + Errors ──────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
