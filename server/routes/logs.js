@@ -8,22 +8,19 @@ const PAGE_SIZE = 50
 const MAX_SIZE  = 100
 const MAX_RANGE = 7 * 24 * 60 * 60 * 1000
 
-// Table view only — full document fetched on expand via GET /api/logs/:id
+// Table view — minimal fields only, full doc fetched on expand
 const SOURCE_FIELDS = [
-  'event_time',
-  'event_id',
-  'channel',
-  'hostname',
-  'message',
+  'event_time', 'event_id', 'channel',
+  'hostname',   'message',  'severity',
 ]
 
 // ── Mock data ──────────────────────────────────────────────────────────────
 const MOCK = process.env.USE_MOCK_DATA === 'true'
 
-const MOCK_HOSTNAMES = ['server-dc01', 'server-web02', 'server-db01', 'server-app03', 'workstation-01']
-const MOCK_CHANNELS  = ['Security', 'System', 'Application', 'Setup']
+const MOCK_HOSTNAMES  = ['server-dc01', 'server-web02', 'server-db01', 'server-app03', 'workstation-01']
+const MOCK_CHANNELS   = ['security', 'system', 'application', 'setup']
 const MOCK_SEVERITIES = ['information', 'warning', 'error', 'critical']
-const MOCK_MESSAGES  = [
+const MOCK_MESSAGES   = [
   'An account was successfully logged on.',
   'An account failed to log on.',
   'A user account was changed.',
@@ -36,55 +33,70 @@ const MOCK_MESSAGES  = [
 const getMockLogs = (count = PAGE_SIZE) => {
   const now = Date.now()
   return Array.from({ length: count }, (_, i) => ({
-    id:               `mock-${i}-${now}`,
-    event_time:       new Date(now - i * 18000).toISOString(),
-    hostname:         MOCK_HOSTNAMES[i % MOCK_HOSTNAMES.length],
-    channel:          MOCK_CHANNELS[i % MOCK_CHANNELS.length],
-    event_id:         [4624, 4625, 4720, 4732, 4648][i % 5],
-    event_type:       'Windows Event',
-    severity:         MOCK_SEVERITIES[i % MOCK_SEVERITIES.length],
-    message:          MOCK_MESSAGES[i % MOCK_MESSAGES.length],
-    // Extended — present on some records only
-    account_name:     i % 3 === 0 ? `user${i}`        : undefined,
-    domain:           i % 3 === 0 ? 'CORP'             : undefined,
-    ip_address:       i % 4 === 0 ? `192.168.1.${i % 255}` : undefined,
-    process_name:     i % 5 === 0 ? 'lsass.exe'        : undefined,
-    source_name:      i % 6 === 0 ? 'Microsoft-Windows-Security-Auditing' : undefined,
-    target_user_name: i % 4 === 0 ? `target${i}`       : undefined,
-    category:         i % 3 === 0 ? 'Logon'            : undefined,
+    id:         `mock-${i}-${now}`,
+    _index:     `windows-logs-${new Date().toISOString().slice(0,10).replace(/-/g,'.')}`,
+    event_time: new Date(now - i * 18000).toISOString(),
+    hostname:   MOCK_HOSTNAMES[i % MOCK_HOSTNAMES.length],
+    channel:    MOCK_CHANNELS[i % MOCK_CHANNELS.length],
+    event_id:   [4624, 4625, 4720, 4732, 4648][i % 5],
+    severity:   MOCK_SEVERITIES[i % MOCK_SEVERITIES.length],
+    message:    MOCK_MESSAGES[i % MOCK_MESSAGES.length],
   }))
 }
 
 // ── Time range helper ──────────────────────────────────────────────────────
-const getTimeRange = (range) => {
-  const now = Date.now()
-  const map = {
-    '15m': 15 * 60 * 1000,
-    '1h':  60 * 60 * 1000,
-    '6h':  6  * 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000,
-  }
-  return { from: now - (map[range] || map['15m']), now }
+const RANGE_MAP = {
+  '15m': 15 * 60 * 1000,
+  '1h':  60 * 60 * 1000,
+  '6h':  6  * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+}
+
+const getTimeRange = (range = '15m') => {
+  const now  = Date.now()
+  const from = now - (RANGE_MAP[range] || RANGE_MAP['15m'])
+  return { from, now }
 }
 
 // ── Query builder ──────────────────────────────────────────────────────────
-// Supported syntax:
-//   plain text        → full-text match on message
-//   event_id:4624     → term on integer field
-//   hostname:server01 → term on keyword field
-//   channel:Security  → term on keyword field
-//   severity:error    → term on keyword field
-//   account_name:admin → term on keyword field
-//   domain:CORP       → term on keyword field
-const buildQuery = (search, from, now) => {
+// Supports two modes:
+//
+// MODE 1 — structured filters (from drill-down URL params)
+//   hostname, channel, event_id, severity passed as individual params
+//   All combined with AND logic
+//
+// MODE 2 — freetext search (from search bar)
+//   plain text       → full-text on message
+//   field:value      → term filter on that field
+//
+// MODE 1 takes priority — if any structured filter is present,
+// freetext search is ignored (Replace behavior)
+const buildQuery = (params, from, now) => {
+  const { search, hostname, channel, event_id, severity } = params
+
   const timeFilter = {
-    range: {
-      event_time: { gte: from, lte: now, format: 'epoch_millis' }
-    }
+    range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } }
   }
 
+  const filters = [timeFilter]
+
+  // ── MODE 1: structured drill-down filters ────────────────────────────────
+  const hasStructured = hostname || channel || event_id || severity
+
+  if (hasStructured) {
+    if (hostname)  filters.push({ term: { hostname } })
+    if (channel)   filters.push({ term: { channel: channel.toLowerCase() } })
+    if (severity)  filters.push({ term: { severity: severity.toLowerCase() } })
+    if (event_id) {
+      const num = parseInt(event_id, 10)
+      if (!isNaN(num)) filters.push({ term: { event_id: num } })
+    }
+    return { bool: { filter: filters } }
+  }
+
+  // ── MODE 2: freetext / field:value search ────────────────────────────────
   if (!search?.trim()) {
-    return { bool: { filter: [timeFilter] } }
+    return { bool: { filter: filters } }
   }
 
   const trimmed    = search.trim()
@@ -93,38 +105,39 @@ const buildQuery = (search, from, now) => {
   if (fieldMatch) {
     const [, field, value] = fieldMatch
 
-    // Integer fields
     if (field === 'event_id') {
       const num = parseInt(value, 10)
       if (!isNaN(num)) {
-        return { bool: { filter: [timeFilter, { term: { event_id: num } }] } }
+        filters.push({ term: { event_id: num } })
+        return { bool: { filter: filters } }
       }
     }
 
-    // Keyword fields
     const keywordFields = ['hostname', 'channel', 'severity', 'account_name', 'domain', 'source_name', 'process_name']
     if (keywordFields.includes(field)) {
-      return { bool: { filter: [timeFilter, { term: { [field]: value } }] } }
+      filters.push({ term: { [field]: value } })
+      return { bool: { filter: filters } }
     }
   }
 
   // Plain text → full-text on message
   return {
     bool: {
-      filter: [timeFilter],
+      filter: filters,
       must:   [{ match: { message: trimmed } }],
     }
   }
 }
 
-// ── Shape a raw ES hit into table row fields only ─────────────────────────
-// Full document is fetched separately on row expand via GET /api/logs/:id
+// ── Shape list row — includes _index for fast detail fetch ─────────────────
 const shapeHit = (hit) => ({
   id:         hit._id,
+  _index:     hit._index,       // exact index — avoids 7-day scan on detail fetch
   event_time: hit._source.event_time,
   hostname:   hit._source.hostname,
   channel:    hit._source.channel,
   event_id:   hit._source.event_id,
+  severity:   hit._source.severity,
   message:    hit._source.message,
 })
 
@@ -140,11 +153,12 @@ router.get('/', async (req, res) => {
 
   try {
     const {
-      search = '',
-      range  = '15m',
-      size   = PAGE_SIZE,
-      after  = null,
-      page   = 0,         // used for display only — actual pagination via search_after
+      search   = '',
+      range    = '15m',
+      size     = PAGE_SIZE,
+      after    = null,
+      // structured drill-down filters
+      hostname, channel, event_id, severity,
     } = req.query
 
     const pageSize      = Math.min(parseInt(size, 10) || PAGE_SIZE, MAX_SIZE)
@@ -155,15 +169,15 @@ router.get('/', async (req, res) => {
     }
 
     const index = getIndices(from, now)
-    const query = buildQuery(search, from, now)
+    const query = buildQuery({ search, hostname, channel, event_id, severity }, from, now)
 
     const body = {
-      size: pageSize,
+      size:    pageSize,
       _source: SOURCE_FIELDS,
       query,
       sort: [
-        { event_time: { order: 'desc' } },
-        { _id:        { order: 'desc' } },   // tiebreaker for search_after
+        { event_time:  { order: 'desc' } },
+        { _shard_doc:  { order: 'desc' } },  // deterministic tiebreaker, zero fielddata overhead
       ],
     }
 
@@ -191,28 +205,21 @@ router.get('/', async (req, res) => {
   }
 })
 
-module.exports = router
-
 // ── GET /api/logs/:id ──────────────────────────────────────────────────────
-// Fetches the full document by _id.
-// Searches last 7 days of indices since we don't know which day the doc is in.
+// Uses exact _index passed from frontend — avoids scanning 7 daily indices
 router.get('/:id', async (req, res) => {
   if (MOCK) {
-    // Return a full mock document for UI testing
     return res.json({
       id:                  req.params.id,
       event_time:          new Date().toISOString(),
       event_id:            4624,
       event_type:          'Windows Event',
-      channel:             'Security',
+      channel:             'security',
       hostname:            'server-dc01',
       host:                'server-dc01.corp.local',
       severity:            'information',
       severity_value:      4,
       message:             'An account was successfully logged on.',
-      account_name:        'john.doe',
-      account_type:        'User',
-      domain:              'CORP',
       subject_user_name:   'SYSTEM',
       subject_domain_name: 'NT AUTHORITY',
       target_user_name:    'john.doe',
@@ -227,34 +234,32 @@ router.get('/:id', async (req, res) => {
       elevated_token:      'Yes',
       logon_process_name:  'Kerberos',
       auth_package_name:   'Kerberos',
-      log_type:            'Security',
-      event_category:      'Authentication',
       record_number:       1234567,
-      monitor_reason:      null,
     })
   }
 
   try {
-    const { id } = req.params
+    const { id }    = req.params
+    const raw       = req.query.index
+    const index     = typeof raw === 'string' && raw.length > 0
+      ? raw
+      : getIndices(Date.now() - MAX_RANGE, Date.now())  // fallback to 7-day scan
 
-    // Search across last 7 days — we don't store which index a doc came from
-    const now    = Date.now()
-    const from   = now - MAX_RANGE
-    const index  = getIndices(from, now)
+    const { data } = await esClient.post(`/${index}/_search`, {
+      size:  1,
+      query: { ids: { values: [id] } },
+    })
 
-    const { data } = await esClient.get(`/${index}/_doc/${id}`)
+    const hit = data.hits?.hits?.[0]
+    if (!hit) return res.status(404).json({ error: 'Log not found.' })
 
-    if (!data.found) {
-      return res.status(404).json({ error: 'Log not found.' })
-    }
-
-    res.json({ id: data._id, ...data._source })
+    res.json({ id: hit._id, ...hit._source })
 
   } catch (err) {
-    if (err.response?.status === 404) {
-      return res.status(404).json({ error: 'Log not found.' })
-    }
-    console.error('[LOGS] fetch by id error:', err.message)
+    console.error('[LOGS] detail error:', err.response?.data || err.message)
     res.status(500).json({ error: 'Failed to fetch log detail.' })
   }
 })
+
+// ── module.exports MUST be after all routes ────────────────────────────────
+module.exports = router
