@@ -22,26 +22,42 @@ export const tooltip = (isDark) => ({
   textStyle: { color: isDark ? '#eef2f9' : '#1e293b', fontSize: 13, fontFamily: 'monospace' },
 })
 
+// ── Step 1.4: bucket interval per range ────────────────────────────────────
+// Keeps line charts clean — avoids noisy 1m spikes on a 24h view
+const BUCKET = {
+  '15m': '1m',
+  '1h':  '5m',
+  '6h':  '15m',
+  '24h': '1h',
+}
+
 // ── Line chart ──────────────────────────────────────────────────────────────
-export const lineOption = (isDark, data, color, label) => {
-  const safe = Array.isArray(data) ? data : []
-  const a    = ax(isDark)
+export const lineOption = (isDark, data, color, label, timeRange = '15m') => {
+  const safe     = Array.isArray(data) ? data : []
+  const a        = ax(isDark)
+  const interval = BUCKET[timeRange] || '1m'
   return {
     backgroundColor: 'transparent',
     grid: { top: 24, right: 16, bottom: 40, left: 52 },
     tooltip: {
       ...tooltip(isDark),
       formatter: (params) => {
-        const p = params[0]
+        const p   = params[0]
+        const fmt = timeRange === '24h' ? 'MM-dd HH:mm' : 'HH:mm'
         return `<span style="font-family:monospace;font-size:12px">
-          ${format(new Date(p.axisValue), 'HH:mm')}<br/><b>${p.value} ${label}</b>
+          ${format(new Date(p.axisValue), fmt)}<br/><b>${p.value} ${label}</b>
         </span>`
       }
     },
     xAxis: {
       type:      'category',
       data:      safe.map(d => d.time),
-      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace', formatter: v => format(new Date(v), 'HH:mm') },
+      axisLabel: {
+        color:      a.text,
+        fontSize:   12,
+        fontFamily: 'monospace',
+        formatter:  v => format(new Date(v), timeRange === '24h' ? 'HH:mm' : 'HH:mm'),
+      },
       axisLine:  { lineStyle: { color: a.line } },
       splitLine: { show: false },
     },

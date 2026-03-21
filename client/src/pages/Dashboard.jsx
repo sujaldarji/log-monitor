@@ -42,14 +42,13 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState(null)
   const [kibanaUrl,   setKibanaUrl]   = useState(null)
 
-  // Phase 1.1: timeRange state goes here
-  // const [timeRange, setTimeRange] = useState('15m')
+  // Phase 1.1 ✅
+  const [timeRange, setTimeRange] = useState('15m')
 
   // Phase 2.1: isLive state goes here
   // const [isLive, setIsLive] = useState(true)
 
   // ── Fetch all stats in parallel ─────────────────────────────────────────
-  // Phase 1.2: add ?range=${timeRange} to each call
   // Phase 2.2: wrap interval in if (isLive)
   const fetchAll = useCallback(async () => {
     const loading = { loading: true }
@@ -60,11 +59,11 @@ export default function Dashboard() {
     setIndexSize(s   => ({ ...s, ...loading }))
 
     const [lr, err, ts, tc, is] = await Promise.allSettled([
-      api.get('/stats/log-rate'),
-      api.get('/stats/errors'),
-      api.get('/stats/top-sources'),
-      api.get('/stats/top-channels'),
-      api.get('/stats/index-size'),
+      api.get('/stats/log-rate',     { params: { range: timeRange } }),  // Step 1.2 ✅
+      api.get('/stats/errors',       { params: { range: timeRange } }),  // Step 1.2 ✅
+      api.get('/stats/top-sources',  { params: { range: timeRange } }),  // Step 1.2 ✅
+      api.get('/stats/top-channels', { params: { range: timeRange } }),  // Step 1.2 ✅
+      api.get('/stats/index-size'),                                       // fixed — not range-dependent
     ])
 
     const resolve = (r) => ({
@@ -79,7 +78,7 @@ export default function Dashboard() {
     setTopChannels(resolve(tc))
     setIndexSize(resolve(is))
     setLastRefresh(new Date())
-  }, [])   // Phase 1.2: add timeRange to dep array
+  }, [timeRange])   // Step 1.2 ✅ — refetch whenever range changes
 
   // Kibana URL — fetched once, not affected by time range
   useEffect(() => {
@@ -133,7 +132,22 @@ export default function Dashboard() {
           {/* Right — controls */}
           <div className="flex items-center gap-4">
 
-            {/* Phase 1.1: time range dropdown goes here */}
+            {/* Step 1.1 ✅ — time range dropdown */}
+            <select
+              value={timeRange}
+              onChange={e => setTimeRange(e.target.value)}
+              className={clsx(
+                'text-sm font-mono px-3 py-1.5 rounded-md border outline-none cursor-pointer transition-all',
+                isDark
+                  ? 'bg-surface border-surface-border text-ink-secondary hover:border-accent/50'
+                  : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-accent/50'
+              )}
+            >
+              <option value="15m">Last 15 min</option>
+              <option value="1h">Last 1 hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h">Last 24 hours</option>
+            </select>
 
             {/* Phase 2.1: live/pause toggle goes here */}
 
@@ -199,14 +213,14 @@ export default function Dashboard() {
 
         {/* ── Row 1: Log Rate + Errors ──────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
-          <LogRateChart    isDark={isDark} {...logRate} />
-          <ErrorChart      isDark={isDark} {...errors}  />
+          <LogRateChart    isDark={isDark} {...logRate}  timeRange={timeRange} />
+          <ErrorChart      isDark={isDark} {...errors}   timeRange={timeRange} />
         </div>
 
         {/* ── Row 2: Top Sources + Top Channels ────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
-          <TopSourcesChart  isDark={isDark} {...topSources}  />
-          <TopChannelsChart isDark={isDark} {...topChannels} />
+          <TopSourcesChart  isDark={isDark} {...topSources}  timeRange={timeRange} />
+          <TopChannelsChart isDark={isDark} {...topChannels} timeRange={timeRange} />
         </div>
 
         {/* Phase 4: <RecentLogsTable isDark={isDark} /> goes here */}

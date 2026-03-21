@@ -1,99 +1,130 @@
-const express            = require('express')
+const express                  = require('express')
 const { esClient, getIndices } = require('../lib/elasticsearch')
-const cache              = require('../lib/cache')
+const cache                    = require('../lib/cache')
 
 const router = express.Router()
 
-
-
-// ── Mock data for UI testing without Elasticsearch ─────────────────────────
 const MOCK = process.env.USE_MOCK_DATA === 'true'
 
-const getMockLogRate = () => {
-  const now = Date.now()
-  return Array.from({ length: 15 }, (_, i) => ({
-    time:  new Date(now - (14 - i) * 60000).toISOString(),
-    count: Math.floor(Math.random() * 800 + 200),
-  }))
+// ── Step 1.3: parse range param → ms offset ────────────────────────────────
+const RANGE_MAP = {
+  '15m': 15 * 60 * 1000,
+  '1h':  60 * 60 * 1000,
+  '6h':  6  * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
 }
 
-const getMockErrors = () => {
-  const now = Date.now()
-  return Array.from({ length: 15 }, (_, i) => ({
-    time:  new Date(now - (14 - i) * 60000).toISOString(),
-    count: Math.floor(Math.random() * 20),
-  }))
-}
-
-const getMockTopSources = () => [
-  { hostname: 'server-dc01',   count: 1240 },
-  { hostname: 'server-web02',  count: 980  },
-  { hostname: 'server-db01',   count: 870  },
-  { hostname: 'server-app03',  count: 760  },
-  { hostname: 'server-proxy',  count: 650  },
-  { hostname: 'server-backup', count: 430  },
-  { hostname: 'workstation-01',count: 310  },
-  { hostname: 'workstation-02',count: 290  },
-  { hostname: 'server-mon01',  count: 180  },
-  { hostname: 'server-ntp',    count: 90   },
-]
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Builds a standard time range in milliseconds.
- * Dashboard always queries the last 15 minutes.
- */
-const getLast15Min = () => {
+const getTimeRange = (range = '15m') => {
   const now  = Date.now()
-  const from = now - 15 * 60 * 1000
+  const from = now - (RANGE_MAP[range] || RANGE_MAP['15m'])
   return { now, from }
 }
 
-/**
- * Runs an ES aggregation query against the correct daily index.
- * Uses size:0 — never fetches raw documents, only aggregation results.
- */
+// ── Step 1.4: bucket interval per range ────────────────────────────────────
+// Keeps line charts clean — 1m buckets on 24h = 1440 noisy data points
+const BUCKET = {
+  '15m': '1m',
+  '1h':  '5m',
+  '6h':  '15m',
+  '24h': '1h',
+}
+
+// ── ES aggregation helper ──────────────────────────────────────────────────
 const esAgg = async (index, query) => {
   const { data } = await esClient.post(`/${index}/_search`, query)
   return data
 }
 
+// ── Mock data ──────────────────────────────────────────────────────────────
+const getMockLogRate = (range = '15m') => {
+  const now      = Date.now()
+  const duration = RANGE_MAP[range] || RANGE_MAP['15m']
+  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+  const count    = Math.floor(duration / interval)
+  return Array.from({ length: count }, (_, i) => ({
+    time:  new Date(now - (count - i) * interval).toISOString(),
+    count: Math.floor(Math.random() * 800 + 200),
+  }))
+}
+
+const getMockErrors = (range = '15m') => {
+  const now      = Date.now()
+  const duration = RANGE_MAP[range] || RANGE_MAP['15m']
+  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+  const count    = Math.floor(duration / interval)
+  return Array.from({ length: count }, (_, i) => ({
+    time:  new Date(now - (count - i) * interval).toISOString(),
+    count: Math.floor(Math.random() * 20),
+  }))
+}
+
+const getMockTopSources = () => [
+  { hostname: 'server-dc01',    count: 1240 },
+  { hostname: 'server-web02',   count: 980  },
+  { hostname: 'server-db01',    count: 870  },
+  { hostname: 'server-app03',   count: 760  },
+  { hostname: 'server-proxy',   count: 650  },
+  { hostname: 'server-backup',  count: 430  },
+  { hostname: 'workstation-01', count: 310  },
+  { hostname: 'workstation-02', count: 290  },
+  { hostname: 'server-mon01',   count: 180  },
+  { hostname: 'server-ntp',     count: 90   },
+]
+
+const getMockTopChannels = () => [
+  { channel: 'Security',        count: 13420 },
+  { channel: 'System',          count: 8920  },
+  { channel: 'Application',     count: 3000  },
+  { channel: 'Setup',           count: 2000  },
+  { channel: 'ForwardedEvents', count: 1200  },
+]
+
+const getMockIndexSize = () => {
+  const days = 10
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (days - 1 - i))
+    return {
+      date:   d.toISOString().slice(0, 10),
+      sizeGB: parseFloat((Math.random() * 4 + 7).toFixed(2)),
+    }
+  })
+}
+
 // ── GET /api/stats/log-rate ────────────────────────────────────────────────
-// Logs per minute for the last 15 minutes (line chart data)
-router.get('/log-rate', async (_req, res) => {
-    if (MOCK) return res.json({ data: getMockLogRate() })
-  const cacheKey = 'stats:log-rate'
+router.get('/log-rate', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({ data: getMockLogRate(range) })
+
+  // Cache key includes range — prevents 15m result being served for 1h request
+  const cacheKey = `stats:log-rate:${range}`
   const cached   = cache.get(cacheKey)
   if (cached) return res.json(cached)
 
   try {
-    const { now, from } = getLast15Min()
+    const { now, from } = getTimeRange(range)
     const index         = getIndices(from, now)
+    const interval      = BUCKET[range] || '1m'   // Step 1.4 ✅
 
     const result = await esAgg(index, {
-      size: 0,                          // aggregation only — no documents
+      size: 0,
       query: {
-        range: {
-          '@timestamp': { gte: from, lte: now, format: 'epoch_millis' }
-        }
+        range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } }
       },
       aggs: {
-        logs_per_minute: {
+        logs_per_bucket: {
           date_histogram: {
-            field:          '@timestamp',
-            fixed_interval: '1m',
-            min_doc_count:  0,          // include empty buckets so chart has no gaps
+            field:           'event_time',
+            fixed_interval:  interval,     // Step 1.4 ✅ — scales with range
+            min_doc_count:   0,
             extended_bounds: { min: from, max: now }
           }
         }
       }
     })
 
-    // Shape for ECharts: [{ time, count }]
-    const buckets = result.aggregations.logs_per_minute.buckets
     const payload = {
-      data: buckets.map(b => ({
+      data: result.aggregations.logs_per_bucket.buckets.map(b => ({
         time:  b.key_as_string,
         count: b.doc_count,
       }))
@@ -109,42 +140,43 @@ router.get('/log-rate', async (_req, res) => {
 })
 
 // ── GET /api/stats/errors ──────────────────────────────────────────────────
-// Error events (eventid 4625 = failed login) per minute for last 15 minutes
-router.get('/errors', async (_req, res) => {
-     if (MOCK) return res.json({ data: getMockErrors() })
-  const cacheKey = 'stats:errors'
+router.get('/errors', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({ data: getMockErrors(range) })
+
+  const cacheKey = `stats:errors:${range}`
   const cached   = cache.get(cacheKey)
   if (cached) return res.json(cached)
 
   try {
-    const { now, from } = getLast15Min()
+    const { now, from } = getTimeRange(range)
     const index         = getIndices(from, now)
+    const interval      = BUCKET[range] || '1m'
 
     const result = await esAgg(index, {
       size: 0,
       query: {
         bool: {
           filter: [
-            { range: { '@timestamp': { gte: from, lte: now, format: 'epoch_millis' } } },
-            { term:  { eventid: 4625 } }    // Windows failed login event
+            { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+            { term:  { event_id: 4625 } }
           ]
         }
       },
       aggs: {
-        errors_per_minute: {
+        errors_per_bucket: {
           date_histogram: {
-            field:          '@timestamp',
-            fixed_interval: '1m',
-            min_doc_count:  0,
+            field:           'event_time',
+            fixed_interval:  interval,
+            min_doc_count:   0,
             extended_bounds: { min: from, max: now }
           }
         }
       }
     })
 
-    const buckets = result.aggregations.errors_per_minute.buckets
     const payload = {
-      data: buckets.map(b => ({
+      data: result.aggregations.errors_per_bucket.buckets.map(b => ({
         time:  b.key_as_string,
         count: b.doc_count,
       }))
@@ -160,37 +192,32 @@ router.get('/errors', async (_req, res) => {
 })
 
 // ── GET /api/stats/top-sources ─────────────────────────────────────────────
-// Top 10 hostnames by log volume in the last 15 minutes (bar chart)
-router.get('/top-sources', async (_req, res) => {
-    if (MOCK) return res.json({ data: getMockTopSources() })
-  const cacheKey = 'stats:top-sources'
+router.get('/top-sources', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({ data: getMockTopSources() })
+
+  const cacheKey = `stats:top-sources:${range}`
   const cached   = cache.get(cacheKey)
   if (cached) return res.json(cached)
 
   try {
-    const { now, from } = getLast15Min()
+    const { now, from } = getTimeRange(range)
     const index         = getIndices(from, now)
 
     const result = await esAgg(index, {
       size: 0,
       query: {
-        range: {
-          '@timestamp': { gte: from, lte: now, format: 'epoch_millis' }
-        }
+        range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } }
       },
       aggs: {
         top_sources: {
-          terms: {
-            field: 'hostname',  // keyword field — exact match
-            size:  10,          // top 10 only
-          }
+          terms: { field: 'hostname', size: 10 }
         }
       }
     })
 
-    const buckets = result.aggregations.top_sources.buckets
     const payload = {
-      data: buckets.map(b => ({
+      data: result.aggregations.top_sources.buckets.map(b => ({
         hostname: b.key,
         count:    b.doc_count,
       }))
@@ -205,80 +232,48 @@ router.get('/top-sources', async (_req, res) => {
   }
 })
 
-
-
-// ── Mock data for new charts ───────────────────────────────────────────────
-const getMockTopChannels = () => [
-  { channel: 'Security',    count: 13420 },
-  { channel: 'System',      count: 8920  },
-  { channel: 'Application', count: 3000  },
-  { channel: 'Setup',       count: 2000  },
-  { channel: 'ForwardedEvents', count: 1200 },
-]
 // ── GET /api/stats/top-channels ────────────────────────────────────────────
-// Top 5 Windows channels by volume in the last 15 minutes
-router.get('/top-channels', async (_req, res) => {
+router.get('/top-channels', async (req, res) => {
+  const range = req.query.range || '15m'
   if (MOCK) return res.json({ data: getMockTopChannels() })
- 
-  const cacheKey = 'stats:top-channels'
+
+  const cacheKey = `stats:top-channels:${range}`
   const cached   = cache.get(cacheKey)
   if (cached) return res.json(cached)
- 
+
   try {
-    const { now, from } = getLast15Min()
+    const { now, from } = getTimeRange(range)
     const index         = getIndices(from, now)
- 
+
     const result = await esAgg(index, {
       size: 0,
       query: {
-        range: {
-          '@timestamp': { gte: from, lte: now, format: 'epoch_millis' }
-        }
+        range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } }
       },
       aggs: {
         top_channels: {
-          terms: {
-            field: 'channel',
-            size:  5,
-          }
+          terms: { field: 'channel', size: 5 }
         }
       }
     })
- 
-    const buckets = result.aggregations.top_channels.buckets
+
     const payload = {
-      data: buckets.map(b => ({
+      data: result.aggregations.top_channels.buckets.map(b => ({
         channel: b.key,
         count:   b.doc_count,
       }))
     }
- 
+
     cache.set(cacheKey, payload)
     res.json(payload)
- 
+
   } catch (err) {
     console.error('[STATS] top-channels error:', err.message)
     res.status(500).json({ error: 'Failed to fetch top channels.' })
   }
 })
 
-const getMockIndexSize = () => {
-  const days = 10
-  return Array.from({ length: days }, (_, i) => {
-    const d    = new Date()
-    d.setDate(d.getDate() - (days - 1 - i))
-    const date = d.toISOString().slice(0, 10)
-    return {
-      date,
-      sizeGB: parseFloat((Math.random() * 4 + 7).toFixed(2)),  // 7–11 GB range
-    }
-  })
-}
-
-// ── GET /api/stats/index-size ──────────────────────────────────────────────
-// Daily index sizes for last 10 days using _cat/indices API.
-// If fewer than 10 indices exist (e.g. system is new), returns however many are available.
-// Cached for 5 minutes — index sizes change slowly
+// ── GET /api/stats/index-size — fixed, NOT range-dependent ────────────────
 const INDEX_SIZE_CACHE_TTL = 5 * 60 * 1000
 const INDEX_SIZE_DAYS      = 10
 
@@ -292,13 +287,10 @@ router.get('/index-size', async (_req, res) => {
   try {
     const prefix = process.env.ES_INDEX_PREFIX || 'test-logs-elk'
 
-    // _cat/indices returns lightweight index metadata including store size
     const { data } = await esClient.get(
       `/_cat/indices/${prefix}-*?format=json&h=index,store.size&s=index:asc`
     )
 
-    // Calculate cutoff — last INDEX_SIZE_DAYS days
-    // No hard requirement: if only 5 indices exist, all 5 are returned
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - INDEX_SIZE_DAYS)
 
@@ -315,7 +307,6 @@ router.get('/index-size', async (_req, res) => {
     const payload = {
       data: data
         .map(entry => {
-          // Extract date from index name: test-logs-elk-2026.03.05 → 2026-03-05
           const match = entry.index.match(/(\d{4})\.(\d{2})\.(\d{2})$/)
           if (!match) return null
           const date = `${match[1]}-${match[2]}-${match[3]}`
@@ -325,7 +316,6 @@ router.get('/index-size', async (_req, res) => {
         .sort((a, b) => a.date.localeCompare(b.date))
     }
 
-    // Cache for 5 minutes instead of default 30s
     cache.set(cacheKey, payload, INDEX_SIZE_CACHE_TTL)
     res.json(payload)
 
