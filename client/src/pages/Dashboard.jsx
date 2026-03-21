@@ -45,8 +45,8 @@ export default function Dashboard() {
   // Phase 1.1 ✅
   const [timeRange, setTimeRange] = useState('15m')
 
-  // Phase 2.1: isLive state goes here
-  // const [isLive, setIsLive] = useState(true)
+  // Phase 2.1 ✅
+  const [isLive, setIsLive] = useState(true)
 
   // ── Fetch all stats in parallel ─────────────────────────────────────────
   // Phase 2.2: wrap interval in if (isLive)
@@ -87,12 +87,13 @@ export default function Dashboard() {
       .catch(() => setKibanaUrl(null))
   }, [])
 
-  // Initial fetch + auto-refresh
+  // Initial fetch + auto-refresh — pauses when isLive is false
   useEffect(() => {
     fetchAll()
+    if (!isLive) return                              // Step 2.3 ✅ — paused, no interval
     const id = setInterval(fetchAll, REFRESH_INTERVAL)
     return () => clearInterval(id)
-  }, [fetchAll])
+  }, [fetchAll, isLive])                             // Step 2.2 ✅ — re-runs when toggled
 
   const handleLogout = async () => {
     try { await api.post('/auth/logout') } finally {
@@ -149,7 +150,27 @@ export default function Dashboard() {
               <option value="24h">Last 24 hours</option>
             </select>
 
-            {/* Phase 2.1: live/pause toggle goes here */}
+            {/* Phase 2.1 ✅ — live/pause toggle */}
+            <button
+              onClick={() => setIsLive(v => !v)}
+              className={clsx(
+                'flex items-center gap-1.5 text-sm font-mono px-3 py-1.5 rounded-md border transition-all',
+                isLive
+                  ? isDark
+                    ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                    : 'border-emerald-400 text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                  : isDark
+                    ? 'border-surface-border text-ink-muted hover:border-accent hover:text-accent'
+                    : 'border-gray-200 text-gray-400 hover:border-accent hover:text-accent'
+              )}
+            >
+              {/* Pulsing dot when live */}
+              <span className={clsx(
+                'w-2 h-2 rounded-full',
+                isLive ? 'bg-emerald-400 animate-pulse' : (isDark ? 'bg-surface-border' : 'bg-gray-300')
+              )} />
+              {isLive ? 'Live' : 'Paused'}
+            </button>
 
             {lastRefresh && (
               <div className={clsx(
