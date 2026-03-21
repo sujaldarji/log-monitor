@@ -104,7 +104,14 @@ export const hBarOption = (isDark, data, keyField) => {
     yAxis: {
       type:      'category',
       data:      sorted.map(d => String(d[keyField])),
-      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace' },
+      axisLabel: {
+        color:      a.text,
+        fontSize:   12,
+        fontFamily: 'monospace',
+        width:      90,
+        overflow:   'truncate',
+        ellipsis:   '…',
+      },
       axisLine:  { lineStyle: { color: a.line } },
       splitLine: { show: false },
     },

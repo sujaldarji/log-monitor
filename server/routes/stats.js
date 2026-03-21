@@ -280,10 +280,8 @@ router.get('/summary', async (req, res) => {
 
   if (MOCK) return res.json({
     data: {
-      totalLogs:   12430,
-      errorCount:  324,
-      uniqueHosts: 8,
-      topEventId:  4625,
+      current:  { totalLogs: 12430, errorCount: 324, uniqueHosts: 8, topEventId: 4625 },
+      previous: { totalLogs: 13811, errorCount: 224, uniqueHosts: 6 },
     }
   })
 
@@ -292,26 +290,44 @@ router.get('/summary', async (req, res) => {
   if (cached) return res.json(cached)
 
   try {
-    const { now, from } = getTimeRange(range)
-    const index         = getIndices(from, now)
+    const now      = Date.now()
+    const offset   = RANGE_MAP[range] || RANGE_MAP['15m']
 
-    const result = await esAgg(index, {
+    // Current window:  now-offset → now
+    // Previous window: now-2*offset → now-offset
+    const currFrom = now - offset
+    const prevFrom = now - offset * 2
+    const prevTo   = currFrom
+
+    const currIndex = getIndices(currFrom, now)
+    const prevIndex = getIndices(prevFrom, prevTo)
+
+    const aggBody = (from, to) => ({
       size: 0,
-      query: { bool: { filter: [{ range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } }] } },
+      query: { bool: { filter: [{ range: { event_time: { gte: from, lte: to, format: 'epoch_millis' } } }] } },
       aggs: {
         error_count:  { filter: { term: { event_id: 4625 } } },
         unique_hosts: { cardinality: { field: 'hostname' } },
-        top_event_id: { terms: { field: 'event_id', size: 1 } }
+        top_event_id: { terms: { field: 'event_id', size: 1 } },
       }
     })
 
-    const aggs   = result.aggregations
+    // Fetch both windows in parallel — one extra ES query, negligible cost
+    const [curr, prev] = await Promise.all([
+      esAgg(currIndex, aggBody(currFrom, now)),
+      esAgg(prevIndex, aggBody(prevFrom, prevTo)),
+    ])
+
+    const shape = (r) => ({
+      totalLogs:   r.hits.total.value,
+      errorCount:  r.aggregations.error_count.doc_count,
+      uniqueHosts: r.aggregations.unique_hosts.value,
+    })
+
     const payload = {
       data: {
-        totalLogs:   result.hits.total.value,
-        errorCount:  aggs.error_count.doc_count,
-        uniqueHosts: aggs.unique_hosts.value,
-        topEventId:  aggs.top_event_id.buckets[0]?.key ?? null,
+        current:  { ...shape(curr), topEventId: curr.aggregations.top_event_id.buckets[0]?.key ?? null },
+        previous: shape(prev),
       }
     }
 
