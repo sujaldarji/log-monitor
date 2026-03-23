@@ -279,10 +279,10 @@ router.get('/summary', async (req, res) => {
   const range = req.query.range || '15m'
 
   if (MOCK) return res.json({
-    data: {
-      current:  { totalLogs: 12430, errorCount: 324, uniqueHosts: 8, topEventId: 4625 },
-      previous: { totalLogs: 13811, errorCount: 224, uniqueHosts: 6 },
-    }
+  data: {
+    current:  { totalLogs: 84320, errorCount: 324, errorRate: 0.4, criticalCount: 12, uniqueHosts: 8, topEventId: 4625, loginFailures: 47, powershellCount: 231 },
+    previous: { totalLogs: 91200, errorCount: 224, errorRate: 0.2, criticalCount: 4,  uniqueHosts: 7, loginFailures: 12, powershellCount: 180 },
+   }
   })
 
   const cacheKey = `stats:summary:${range}`
@@ -302,15 +302,22 @@ router.get('/summary', async (req, res) => {
     const currIndex = getIndices(currFrom, now)
     const prevIndex = getIndices(prevFrom, prevTo)
 
+    // Replace aggBody with this
     const aggBody = (from, to) => ({
-      size: 0,
-      query: { bool: { filter: [{ range: { event_time: { gte: from, lte: to, format: 'epoch_millis' } } }] } },
-      aggs: {
-        error_count:  { filter: { term: { event_id: 4625 } } },
-        unique_hosts: { cardinality: { field: 'hostname' } },
-        top_event_id: { terms: { field: 'event_id', size: 1 } },
-      }
-    })
+  size: 0,
+  // no track_total_hits needed — using value_count agg instead
+  query: { bool: { filter: [{ range: { event_time: { gte: from, lte: to, format: 'epoch_millis' } } }] } },
+  aggs: {
+    total_logs:       { value_count: { field: '_id'              } },
+    error_count:      { filter: { term: { severity: 'error'              } } },
+    critical_count:   { filter: { term: { severity: 'critical'           } } },
+    unique_hosts:     { cardinality: { field: 'hostname'                  } },
+    top_event_id:     { terms: { field: 'event_id', size: 1              } },
+    login_failures:   { filter: { term: { event_id: 4625                 } } },
+    powershell_count: { filter: { term: { channel: 'windows powershell'  } } },
+  }
+})
+
 
     // Fetch both windows in parallel — one extra ES query, negligible cost
     const [curr, prev] = await Promise.all([
@@ -318,11 +325,20 @@ router.get('/summary', async (req, res) => {
       esAgg(prevIndex, aggBody(prevFrom, prevTo)),
     ])
 
-    const shape = (r) => ({
-      totalLogs:   r.hits.total.value,
-      errorCount:  r.aggregations.error_count.doc_count,
-      uniqueHosts: r.aggregations.unique_hosts.value,
-    })
+    const shape = (r) => {
+  const total  = r.aggregations.total_logs.value   // ← from agg, not hits.total
+  const errors = r.aggregations.error_count.doc_count
+  const rate   = total > 0 ? parseFloat(((errors / total) * 100).toFixed(1)) : 0
+  return {
+    totalLogs:       total,
+    errorCount:      errors,
+    errorRate:       rate,
+    criticalCount:   r.aggregations.critical_count.doc_count,
+    uniqueHosts:     r.aggregations.unique_hosts.value,
+    loginFailures:   r.aggregations.login_failures.doc_count,
+    powershellCount: r.aggregations.powershell_count.doc_count,
+  }
+}
 
     const payload = {
       data: {
