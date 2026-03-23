@@ -19,12 +19,11 @@ import ErrorChart       from '../components/dashboard/ErrorChart'
 import TopSourcesChart  from '../components/dashboard/TopSourcesChart'
 import TopChannelsChart from '../components/dashboard/TopChannelsChart'
 import IndexSizeChart   from '../components/dashboard/IndexSizeChart'
+import LoginFailureRateChart   from '../components/dashboard/LoginFailureRateChart'
+import PowerShellActivityChart from '../components/dashboard/PowerShellActivityChart'
 
-// Phase 2: MetricsStrip  ✅
 import MetricsStrip      from '../components/dashboard/MetricsStrip'
-// Phase 3: RecentLogs   ✅
 import RecentLogsTable   from '../components/dashboard/RecentLogsTable'
-// Phase 4: InsightsPanel → import InsightsPanel from '../components/dashboard/InsightsPanel'
 
 const REFRESH_INTERVAL = 30_000
 
@@ -45,6 +44,8 @@ export default function Dashboard() {
   const [recentLogs,  setRecentLogs]  = useState({ data: [],   loading: true, error: null })
   const [lastRefresh, setLastRefresh] = useState(null)
   const [kibanaUrl,   setKibanaUrl]   = useState(null)
+  const [loginFailureRate, setLoginFailureRate] = useState(initState)
+  const [powershell,       setPowershell]       = useState(initState)
 
   // Phase 1.1 ✅
   const [timeRange, setTimeRange] = useState('15m')
@@ -63,8 +64,10 @@ export default function Dashboard() {
     setIndexSize(s   => ({ ...s, ...loading }))
     setSummary(s     => ({ ...s, ...loading }))
     setRecentLogs(s  => ({ ...s, ...loading }))
+    setLoginFailureRate(s => ({ ...s, ...loading }))
+    setPowershell(s       => ({ ...s, ...loading }))
 
-    const [lr, err, ts, tc, is, sm, rl] = await Promise.allSettled([
+    const [lr, err, ts, tc, is, sm, rl, lfr, ps] = await Promise.allSettled([
       api.get('/stats/log-rate',     { params: { range: timeRange } }),
       api.get('/stats/errors',       { params: { range: timeRange } }),
       api.get('/stats/top-sources',  { params: { range: timeRange } }),
@@ -72,6 +75,9 @@ export default function Dashboard() {
       api.get('/stats/index-size'),
       api.get('/stats/summary',      { params: { range: timeRange } }),
       api.get('/logs/recent',        { params: { range: timeRange, limit: 10, severity: 'error,critical' } }),
+      api.get('/stats/login-failure-rate',    { params: { range: timeRange } }),
+      api.get('/stats/powershell-activity',   { params: { range: timeRange } }),
+       
     ])
 
     const resolve = (r) => ({
@@ -86,6 +92,8 @@ export default function Dashboard() {
     setTopChannels(resolve(tc))
     setIndexSize(resolve(is))
     setRecentLogs(resolve(rl))
+    setLoginFailureRate(resolve(lfr))
+    setPowershell(resolve(ps))
     setSummary({
       data:    sm.status === 'fulfilled' ? sm.value.data.data : null,
       loading: false,
@@ -253,7 +261,13 @@ export default function Dashboard() {
           <ErrorChart      isDark={isDark} {...errors}   timeRange={timeRange} />
         </div>
 
-        {/* ── Row 2: Top Sources + Top Channels ────────────────────────── */}
+        {/* ── Row 2: Login Failure Rate | PowerShell Activity ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
+          <LoginFailureRateChart   isDark={isDark} {...loginFailureRate} timeRange={timeRange} />
+          <PowerShellActivityChart isDark={isDark} {...powershell}       timeRange={timeRange} />
+        </div>
+
+        {/* ── Row 3: Top Sources + Top Channels ── */} 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
           <TopSourcesChart  isDark={isDark} {...topSources}  timeRange={timeRange} />
           <TopChannelsChart isDark={isDark} {...topChannels} timeRange={timeRange} />

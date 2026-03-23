@@ -408,4 +408,117 @@ router.get('/index-size', async (_req, res) => {
   }
 })
 
+// ── GET /api/stats/login-failure-rate ─────────────────────────────────────
+// % failure rate per time bucket: 4625 / (4624 + 4625) * 100
+router.get('/login-failure-rate', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) {
+    const now      = Date.now()
+    const duration = RANGE_MAP[range] || RANGE_MAP['15m']
+    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+    const count    = Math.floor(duration / interval)
+    return res.json({
+      data: Array.from({ length: count }, (_, i) => ({
+        time: new Date(now - (count - i) * interval).toISOString(),
+        rate: parseFloat((Math.random() * 15).toFixed(1)),
+      }))
+    })
+  }
+ 
+  const cacheKey = `stats:login-rate:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+    const interval      = BUCKET[range] || '1m'
+    const timeFilter    = { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } }
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: { bool: { filter: [timeFilter, { terms: { event_id: [4624, 4625] } }] } },
+      aggs: {
+        by_time: {
+          date_histogram: { field: 'event_time', fixed_interval: interval, min_doc_count: 0, extended_bounds: { min: from, max: now } },
+          aggs: {
+            failures: { filter: { term: { event_id: 4625 } } },
+          }
+        }
+      }
+    })
+ 
+    const payload = {
+      data: result.aggregations.by_time.buckets.map(b => {
+        const total    = b.doc_count
+        const failures = b.failures.doc_count
+        const rate     = total > 0 ? parseFloat(((failures / total) * 100).toFixed(1)) : 0
+        return { time: b.key_as_string, rate }
+      })
+    }
+    cache.set(cacheKey, payload)
+    res.json(payload)
+  } catch (err) {
+    console.error('[STATS] login-rate error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch login failure rate.' })
+  }
+})
+
+
+// ── GET /api/stats/powershell-activity ───────────────────────────────────
+router.get('/powershell-activity', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) {
+    const now      = Date.now()
+    const duration = RANGE_MAP[range] || RANGE_MAP['15m']
+    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+    const count    = Math.floor(duration / interval)
+    return res.json({
+      data: Array.from({ length: count }, (_, i) => ({
+        time:  new Date(now - (count - i) * interval).toISOString(),
+        count: Math.floor(Math.random() * 30),
+      }))
+    })
+  }
+ 
+  const cacheKey = `stats:powershell:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+    const interval      = BUCKET[range] || '1m'
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: {
+        bool: {
+          filter: [
+            { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+            { term:  { channel: 'windows powershell' } },
+          ]
+        }
+      },
+      aggs: {
+        by_time: {
+          date_histogram: { field: 'event_time', fixed_interval: interval, min_doc_count: 0, extended_bounds: { min: from, max: now } }
+        }
+      }
+    })
+ 
+    const payload = {
+      data: result.aggregations.by_time.buckets.map(b => ({
+        time:  b.key_as_string,
+        count: b.doc_count,
+      }))
+    }
+    cache.set(cacheKey, payload)
+    res.json(payload)
+  } catch (err) {
+    console.error('[STATS] powershell error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch PowerShell activity.' })
+  }
+})
+
 module.exports = router

@@ -6,6 +6,7 @@ export const C = {
   error:   '#ef4444',
   emerald: '#10b981',
   amber:   '#f59e0b',
+  purple:  '#a855f7',
 }
 
 // ── Axis style per theme ────────────────────────────────────────────────────
