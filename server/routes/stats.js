@@ -84,9 +84,14 @@ const getMockIndexSize = () => {
   return Array.from({ length: days }, (_, i) => {
     const d = new Date()
     d.setDate(d.getDate() - (days - 1 - i))
+
+    const count = Math.floor(Math.random() * 5000 + 2000)
+    const sizeGB = parseFloat((count * 0.0008).toFixed(2)) // correlated
+
     return {
-      date:   d.toISOString().slice(0, 10),
-      sizeGB: parseFloat((Math.random() * 4 + 7).toFixed(2)),
+      date: d.toISOString().slice(0, 10),
+      sizeGB,
+      count
     }
   })
 }
@@ -356,7 +361,6 @@ router.get('/summary', async (req, res) => {
   }
 })
 
-
 const INDEX_SIZE_CACHE_TTL = 5 * 60 * 1000
 const INDEX_SIZE_DAYS      = 10
 
@@ -371,11 +375,12 @@ router.get('/index-size', async (_req, res) => {
     const prefix = process.env.ES_INDEX_PREFIX || 'test-logs-elk'
 
     const { data } = await esClient.get(
-      `/_cat/indices/${prefix}-*?format=json&h=index,store.size&s=index:asc`
+      `/_cat/indices/${prefix}-*?format=json&h=index,store.size,docs.count&s=index:asc`
     )
 
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - INDEX_SIZE_DAYS)
+    cutoff.setHours(0, 0, 0, 0) // ✅ date fix
 
     const parseSize = (sizeStr) => {
       if (!sizeStr) return 0
@@ -392,8 +397,15 @@ router.get('/index-size', async (_req, res) => {
         .map(entry => {
           const match = entry.index.match(/(\d{4})\.(\d{2})\.(\d{2})$/)
           if (!match) return null
+
           const date = `${match[1]}-${match[2]}-${match[3]}`
-          return { date, sizeGB: parseSize(entry['store.size']) }
+          const dateObj = new Date(date) // ✅ safer comparison
+
+          return {
+            date,
+            sizeGB: parseSize(entry['store.size']),
+            count: Number(entry['docs.count'] || 0) // ✅ safe parsing
+          }
         })
         .filter(e => e !== null && new Date(e.date) >= cutoff)
         .sort((a, b) => a.date.localeCompare(b.date))

@@ -141,38 +141,62 @@ export const hBarOption = (isDark, data, keyField) => {
     }]
   }
 }
-
 // ── Vertical bar chart ──────────────────────────────────────────────────────
 export const vBarOption = (isDark, data) => {
   const safe = Array.isArray(data) ? data : []
   const a    = ax(isDark)
+
+  // ✅ helper for dynamic unit
+  const formatSize = (gb) => {
+    if (gb < 1) return `${(gb * 1024).toFixed(1)} MB`
+    return `${gb.toFixed(2)} GB`
+  }
+
   return {
     backgroundColor: 'transparent',
     grid: { top: 24, right: 24, bottom: 40, left: 60 },
+
     tooltip: {
       ...tooltip(isDark),
       formatter: params => {
         const p = params[0]
+        const d = safe[p.dataIndex]
+
         return `<span style="font-family:monospace;font-size:12px">
-          ${p.axisValue}<br/><b>${p.value} GB</b>
+          ${p.axisValue}<br/>
+          <b>${formatSize(p.value)}</b><br/>
+          ${d?.count ?? 0} docs
         </span>`
       }
     },
+
     xAxis: {
       type:      'category',
       data:      safe.map(d => d.date),
-      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace', formatter: v => v.slice(5) },
+      axisLabel: {
+        color: a.text,
+        fontSize: 12,
+        fontFamily: 'monospace',
+        formatter: v => v.slice(5)
+      },
       axisLine:  { lineStyle: { color: a.line } },
       splitLine: { show: false },
     },
+
     yAxis: {
       type:      'value',
-      name:      'GB',
+      name:      'Size',
       nameTextStyle: { color: a.text, fontSize: 12 },
-      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace', formatter: v => `${v}GB` },
+      axisLabel: {
+        color: a.text,
+        fontSize: 12,
+        fontFamily: 'monospace',
+        formatter: v => (v < 1 ? `${(v * 1024).toFixed(0)}MB` : `${v}GB`)
+      },
       splitLine: { lineStyle: { color: a.line, type: 'dashed' } },
       axisLine:  { show: false },
     },
+
     series: [{
       type:        'bar',
       data:        safe.map(d => d.sizeGB),
@@ -193,7 +217,7 @@ export const vBarOption = (isDark, data) => {
         color:      a.text,
         fontSize:   11,
         fontFamily: 'monospace',
-        formatter:  p => `${p.value}GB`,
+        formatter:  p => formatSize(p.value), // ✅ dynamic
       }
     }]
   }
