@@ -205,6 +205,64 @@ router.get('/', async (req, res) => {
   }
 })
 
+router.get('/recent', async (req, res) => {
+  const range    = req.query.range    || '15m'
+  const limit    = Math.min(parseInt(req.query.limit, 10) || 10, 50)
+  const severity = req.query.severity || 'error,critical'
+  const channel  = req.query.channel  || null
+
+  if (MOCK) return res.json({ data: getMockRecent(limit) })
+
+  try {
+    const { from, now } = getTimeRange(range)
+    const index         = getIndices(from, now)
+
+    // Build severity filter from comma-separated param
+    // e.g. severity=error,critical → terms filter
+    const severityList = severity.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
+    const filters = [
+      { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+      { terms: { severity: severityList } },
+    ]
+
+    if (channel) filters.push({ term: { channel: channel.toLowerCase() } })
+
+    const { data } = await esClient.post(`/${index}/_search`, {
+      size:    limit,
+      _source: RECENT_SOURCE,
+      query:   { bool: { filter: filters } },
+      sort:    [
+        { event_time: { order: 'desc' } },
+        { _shard_doc: { order: 'desc' } },
+      ],
+    })
+
+    const hits = data.hits?.hits ?? []
+
+    res.json({
+      data: hits.map(h => ({
+        id:         h._id,
+        event_time: h._source.event_time,
+        hostname:   h._source.hostname,
+        channel:    h._source.channel,
+        event_id:   h._source.event_id,
+        severity:   h._source.severity,
+        message:    h._source.message,
+        // Resolved user field — first non-null wins
+        user: h._source.target_user_name
+           ?? h._source.subject_user_name
+           ?? h._source.account_name
+           ?? null,
+      }))
+    })
+
+  } catch (err) {
+    console.error('[LOGS] recent error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch recent logs.' })
+  }
+})
+
 // ── GET /api/logs/:id ──────────────────────────────────────────────────────
 // Uses exact _index passed from frontend — avoids scanning 7 daily indices
 router.get('/:id', async (req, res) => {
@@ -302,63 +360,7 @@ const getMockRecent = (limit = 10) => {
   }))
 }
 
-router.get('/recent', async (req, res) => {
-  const range    = req.query.range    || '15m'
-  const limit    = Math.min(parseInt(req.query.limit, 10) || 10, 50)
-  const severity = req.query.severity || 'error,critical'
-  const channel  = req.query.channel  || null
 
-  if (MOCK) return res.json({ data: getMockRecent(limit) })
-
-  try {
-    const { from, now } = getTimeRange(range)
-    const index         = getIndices(from, now)
-
-    // Build severity filter from comma-separated param
-    // e.g. severity=error,critical → terms filter
-    const severityList = severity.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-
-    const filters = [
-      { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
-      { terms: { severity: severityList } },
-    ]
-
-    if (channel) filters.push({ term: { channel: channel.toLowerCase() } })
-
-    const { data } = await esClient.post(`/${index}/_search`, {
-      size:    limit,
-      _source: RECENT_SOURCE,
-      query:   { bool: { filter: filters } },
-      sort:    [
-        { event_time: { order: 'desc' } },
-        { _shard_doc: { order: 'desc' } },
-      ],
-    })
-
-    const hits = data.hits?.hits ?? []
-
-    res.json({
-      data: hits.map(h => ({
-        id:         h._id,
-        event_time: h._source.event_time,
-        hostname:   h._source.hostname,
-        channel:    h._source.channel,
-        event_id:   h._source.event_id,
-        severity:   h._source.severity,
-        message:    h._source.message,
-        // Resolved user field — first non-null wins
-        user: h._source.target_user_name
-           ?? h._source.subject_user_name
-           ?? h._source.account_name
-           ?? null,
-      }))
-    })
-
-  } catch (err) {
-    console.error('[LOGS] recent error:', err.message)
-    res.status(500).json({ error: 'Failed to fetch recent logs.' })
-  }
-})
 
 // ── module.exports MUST be after all routes ────────────────────────────────
 module.exports = router

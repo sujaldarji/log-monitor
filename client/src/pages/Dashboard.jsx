@@ -217,7 +217,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
-      <div className="relative z-10 max-w-screen-2xl mx-auto px-6 xl:px-10 2xl:px-16 py-6 xl:py-8">
+      <div className="relative z-10 max-w-[1920px] mx-auto px-6 xl:px-10 2xl:px-20 py-6 xl:py-8">
 
         {/* Action buttons */}
         <div className="flex items-center gap-3 mb-7">
