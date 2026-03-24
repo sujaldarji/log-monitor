@@ -15,6 +15,14 @@ export const ax = (isDark) => ({
   line: isDark ? '#182438' : '#e2e8f0',
 })
 
+// Severity colors — shared across all charts for consistency
+export const SEVERITY_COLORS = {
+  critical:    '#ef4444',
+  error:       '#f97316',
+  warning:     '#f59e0b',
+  information: '#64748b',
+}
+
 // ── Shared tooltip style ────────────────────────────────────────────────────
 export const tooltip = (isDark) => ({
   trigger: 'axis',
@@ -218,6 +226,118 @@ export const vBarOption = (isDark, data) => {
         fontSize:   11,
         fontFamily: 'monospace',
         formatter:  p => formatSize(p.value), // ✅ dynamic
+      }
+    }]
+  }
+}
+
+
+
+// ── Stacked horizontal bar — Channel × Severity ─────────────────────────────
+// data shape: [{ channel, critical, error, warning }]
+export const stackedHBarOption = (isDark, data) => {
+  const safe     = Array.isArray(data) ? data : []
+  const a        = ax(isDark)
+  const channels = safe.map(d => d.channel)
+  const severities = ['critical', 'error', 'warning']
+ 
+  return {
+    backgroundColor: 'transparent',
+    grid:    { top: 16, right: 120, bottom: 16, left: 130 },
+    tooltip: { ...tooltip(isDark), trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: {
+      data:      severities,
+      right:     0,
+      top:       'middle',
+      orient:    'vertical',
+      textStyle: { color: a.text, fontSize: 11, fontFamily: 'monospace' },
+    },
+    xAxis: {
+      type:      'value',
+      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace' },
+      splitLine: { lineStyle: { color: a.line, type: 'dashed' } },
+      axisLine:  { show: false },
+    },
+    yAxis: {
+      type:      'category',
+      data:      channels,
+      axisLabel: {
+        color:      a.text,
+        fontSize:   11,
+        fontFamily: 'monospace',
+        width:      120,
+        overflow:   'truncate',
+        ellipsis:   '…',
+      },
+      axisLine:  { lineStyle: { color: a.line } },
+      splitLine: { show: false },
+    },
+    series: severities.map(sev => ({
+      name:        sev,
+      type:        'bar',
+      stack:       'total',              // stacked
+      barMaxWidth: 24,
+      data:        safe.map(d => d[sev] || 0),
+      itemStyle: {
+        color:        SEVERITY_COLORS[sev],
+        borderRadius: sev === 'critical' ? [0, 3, 3, 0] : [0, 0, 0, 0],
+      },
+      label: {
+        show:       false,               // too noisy on stacked
+      },
+    }))
+  }
+}
+
+// ── Severity bar chart — replaces donut ─────────────────────────────────────
+// data shape: [{ severity, count }] — critical/error/warning only
+export const severityBarOption = (isDark, data) => {
+  const safe  = Array.isArray(data) ? data : []
+  const order = ['critical', 'error', 'warning']
+  const sorted = order
+    .map(s => safe.find(d => d.severity === s) || { severity: s, count: 0 })
+  const a = ax(isDark)
+ 
+  return {
+    backgroundColor: 'transparent',
+    grid: { top: 24, right: 16, bottom: 40, left: 52 },
+    tooltip: {
+      ...tooltip(isDark),
+      trigger: 'axis',
+      formatter: params => {
+        const p = params[0]
+        return `<span style="font-family:monospace;font-size:12px">
+          ${p.axisValue}<br/><b>${p.value.toLocaleString()} events</b>
+        </span>`
+      }
+    },
+    xAxis: {
+      type:      'category',
+      data:      sorted.map(d => d.severity),
+      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace' },
+      axisLine:  { lineStyle: { color: a.line } },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type:      'value',
+      axisLabel: { color: a.text, fontSize: 12, fontFamily: 'monospace' },
+      splitLine: { lineStyle: { color: a.line, type: 'dashed' } },
+      axisLine:  { show: false },
+    },
+    series: [{
+      type:        'bar',
+      data:        sorted.map(d => ({
+        value:     d.count,
+        itemStyle: { color: SEVERITY_COLORS[d.severity], borderRadius: [3, 3, 0, 0] }
+      })),
+      barMaxWidth: 48,
+      label: {
+        show:       true,
+        position:   'top',
+        color:      a.text,
+        fontSize:   11,
+        fontFamily: 'monospace',
+        formatter:  p => p.value.toLocaleString(),
       }
     }]
   }

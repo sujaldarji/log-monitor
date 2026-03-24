@@ -533,4 +533,162 @@ router.get('/powershell-activity', async (req, res) => {
   }
 })
 
+
+
+// ── GET /api/stats/top-event-ids ──────────────────────────────────────────
+router.get('/top-event-ids', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({
+    data: [
+      { event_id: 4624, count: 12430 },
+      { event_id: 4625, count: 324   },
+      { event_id: 4634, count: 11200 },
+      { event_id: 4648, count: 89    },
+      { event_id: 4720, count: 3     },
+      { event_id: 4732, count: 2     },
+      { event_id: 7034, count: 45    },
+      { event_id: 6008, count: 12    },
+      { event_id: 1001, count: 230   },
+      { event_id: 4104, count: 67    },
+    ]
+  })
+ 
+  const cacheKey = `stats:top-event-ids:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+      aggs: { by_event_id: { terms: { field: 'event_id', size: 10 } } }
+    })
+ 
+    const payload = {
+      data: result.aggregations.by_event_id.buckets.map(b => ({
+        event_id: b.key,
+        count:    b.doc_count,
+      }))
+    }
+    cache.set(cacheKey, payload)
+    res.json(payload)
+  } catch (err) {
+    console.error('[STATS] top-event-ids error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch top event IDs.' })
+  }
+})
+
+
+
+// ── GET /api/stats/severity-distribution ──────────────────────────────────
+// critical/error/warning counts — information excluded (too noisy)
+router.get('/severity-distribution', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({
+    data: [
+      { severity: 'critical', count: 12  },
+      { severity: 'error',    count: 324 },
+      { severity: 'warning',  count: 891 },
+    ]
+  })
+ 
+  const cacheKey = `stats:severity-dist:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: {
+        bool: {
+          filter: [
+            { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+            { terms: { severity: ['critical', 'error', 'warning'] } },
+          ]
+        }
+      },
+      aggs: {
+        by_severity: { terms: { field: 'severity', size: 3 } }
+      }
+    })
+ 
+    const payload = {
+      data: result.aggregations.by_severity.buckets.map(b => ({
+        severity: b.key,
+        count:    b.doc_count,
+      }))
+    }
+    cache.set(cacheKey, payload)
+    res.json(payload)
+  } catch (err) {
+    console.error('[STATS] severity-dist error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch severity distribution.' })
+  }
+})
+ 
+// ── GET /api/stats/channel-severity ──────────────────────────────────────
+// data shape: [{ channel, critical, error, warning }]
+router.get('/channel-severity', async (req, res) => {
+  const range = req.query.range || '15m'
+  if (MOCK) return res.json({
+    data: [
+      { channel: 'security',                            critical: 12, error: 45,  warning: 234 },
+      { channel: 'system',                              critical: 2,  error: 8,   warning: 56  },
+      { channel: 'application',                         critical: 0,  error: 3,   warning: 12  },
+      { channel: 'microsoft-windows-sysmon/operational',critical: 1,  error: 12,  warning: 89  },
+      { channel: 'windows powershell',                  critical: 0,  error: 4,   warning: 23  },
+      { channel: 'escan antivirus',                     critical: 3,  error: 0,   warning: 0   },
+    ]
+  })
+ 
+  const cacheKey = `stats:channel-severity:${range}`
+  const cached   = cache.get(cacheKey)
+  if (cached) return res.json(cached)
+ 
+  try {
+    const { now, from } = getTimeRange(range)
+    const index         = getIndices(from, now)
+ 
+    const result = await esAgg(index, {
+      size: 0,
+      query: {
+        bool: {
+          filter: [
+            { range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } } },
+            { terms: { severity: ['critical', 'error', 'warning'] } },
+          ]
+        }
+      },
+      aggs: {
+        by_channel: {
+          terms: { field: 'channel', size: 10 },
+          aggs: {
+            by_severity: { terms: { field: 'severity', size: 3 } }
+          }
+        }
+      }
+    })
+ 
+    const payload = {
+      data: result.aggregations.by_channel.buckets.map(b => {
+        const row = { channel: b.key, critical: 0, error: 0, warning: 0 }
+        b.by_severity.buckets.forEach(s => { row[s.key] = s.doc_count })
+        return row
+      })
+    }
+    cache.set(cacheKey, payload)
+    res.json(payload)
+  } catch (err) {
+    console.error('[STATS] channel-severity error:', err.message)
+    res.status(500).json({ error: 'Failed to fetch channel severity.' })
+  }
+})
+ 
+
 module.exports = router

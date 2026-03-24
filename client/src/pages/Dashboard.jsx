@@ -21,6 +21,8 @@ import TopChannelsChart from '../components/dashboard/TopChannelsChart'
 import IndexSizeChart   from '../components/dashboard/IndexSizeChart'
 import LoginFailureRateChart   from '../components/dashboard/LoginFailureRateChart'
 import PowerShellActivityChart from '../components/dashboard/PowerShellActivityChart'
+import TopEventIdsChart          from '../components/dashboard/TopEventIdsChart'
+import SeverityDistributionChart      from '../components/dashboard/SeverityDistributionChart'
 
 import MetricsStrip      from '../components/dashboard/MetricsStrip'
 import RecentLogsTable   from '../components/dashboard/RecentLogsTable'
@@ -39,6 +41,9 @@ export default function Dashboard() {
   const [topSources,  setTopSources]  = useState(initState)
   const [topChannels, setTopChannels] = useState(initState)
   const [indexSize,   setIndexSize]   = useState(initState)
+  const [topEventIds,      setTopEventIds]      = useState(initState)
+  const [channelSeverity,  setChannelSeverity]  = useState(initState)
+  const [severityDist,     setSeverityDist]     = useState(initState)
 
   const [summary,     setSummary]     = useState({ data: null,  loading: true, error: null })
   const [recentLogs,  setRecentLogs]  = useState({ data: [],   loading: true, error: null })
@@ -66,8 +71,11 @@ export default function Dashboard() {
     setRecentLogs(s  => ({ ...s, ...loading }))
     setLoginFailureRate(s => ({ ...s, ...loading }))
     setPowershell(s       => ({ ...s, ...loading }))
+    setTopEventIds(s      => ({ ...s, ...loading }))
+    setSeverityDist(s     => ({ ...s, ...loading }))
+    setChannelSeverity(s  => ({ ...s, ...loading }))
 
-    const [lr, err, ts, tc, is, sm, rl, lfr, ps] = await Promise.allSettled([
+    const [lr, err, ts, tc, is, sm, rl, lfr, ps, tei, cs, sd] = await Promise.allSettled([
       api.get('/stats/log-rate',     { params: { range: timeRange } }),
       api.get('/stats/errors',       { params: { range: timeRange } }),
       api.get('/stats/top-sources',  { params: { range: timeRange } }),
@@ -75,9 +83,11 @@ export default function Dashboard() {
       api.get('/stats/index-size'),
       api.get('/stats/summary',      { params: { range: timeRange } }),
       api.get('/logs/recent',        { params: { range: timeRange, limit: 10, severity: 'error,critical' } }),
-      api.get('/stats/login-failure-rate',    { params: { range: timeRange } }),
-      api.get('/stats/powershell-activity',   { params: { range: timeRange } }),
-       
+      api.get('/stats/login-failure-rate',     { params: { range: timeRange } }),
+      api.get('/stats/powershell-activity',    { params: { range: timeRange } }),
+      api.get('/stats/top-event-ids',          { params: { range: timeRange } }),
+      api.get('/stats/channel-severity',       { params: { range: timeRange } }),
+      api.get('/stats/severity-distribution',  { params: { range: timeRange } }),
     ])
 
     const resolve = (r) => ({
@@ -94,6 +104,9 @@ export default function Dashboard() {
     setRecentLogs(resolve(rl))
     setLoginFailureRate(resolve(lfr))
     setPowershell(resolve(ps))
+    setTopEventIds(resolve(tei))
+    setSeverityDist(resolve(sd))
+    setChannelSeverity(resolve(cs))
     setSummary({
       data:    sm.status === 'fulfilled' ? sm.value.data.data : null,
       loading: false,
@@ -273,7 +286,13 @@ export default function Dashboard() {
           <TopChannelsChart isDark={isDark} {...topChannels} timeRange={timeRange} />
         </div>
 
-        {/* Phase 4 ✅ — recent errors/critical table, between charts and index size */}
+        {/* Row 4: Top Event IDs | Severity Distribution */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6 mb-4 xl:mb-6">
+          <TopEventIdsChart          isDark={isDark} {...topEventIds}  timeRange={timeRange} />
+          <SeverityDistributionChart isDark={isDark} {...severityDist} timeRange={timeRange} />
+        </div>
+
+        {/* Phase 5 ✅ — recent errors/critical table, between charts and index size */}
         <div className="mb-4 xl:mb-6">
           <RecentLogsTable
             isDark={isDark}
@@ -284,9 +303,8 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Phase 5: <InsightsPanel isDark={isDark} /> goes here */}
 
-        {/* ── Row 3: Index Size — fixed, not tied to timeRange ─────────── */}
+        {/* ── Row 6: Index Size — fixed, not tied to timeRange ─────────── */}
         <IndexSizeChart isDark={isDark} {...indexSize} />
 
       </div>
