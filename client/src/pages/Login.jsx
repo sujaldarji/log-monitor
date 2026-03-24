@@ -86,16 +86,6 @@ export default function Login() {
         </>
       )}
 
-      {/* ── System status (top-right) ─────────────────────────────────────── */}
-      <div className="absolute top-4 right-6 flex items-center gap-2 animate-fade-up">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-blink" />
-        <span className={clsx(
-          'text-xs font-mono tracking-widest uppercase',
-          isDark ? 'text-ink-secondary' : 'text-gray-400'
-        )}>
-          System Online
-        </span>
-      </div>
 
       {/* ── Card ──────────────────────────────────────────────────────────── */}
       <div className="relative z-10 w-full max-w-md mx-4">
@@ -108,13 +98,7 @@ export default function Login() {
           )}>
             Centralized Log<br />
             <span className="text-accent">Monitoring</span> Platform
-          </h1>
-          <p className={clsx(
-            'mt-2 text-base',
-            isDark ? 'text-ink-secondary' : 'text-gray-500'
-          )}>
-            Authenticate to access the observability console.
-          </p>
+          </h1>          
         </div>
 
         {/* Form card */}
@@ -231,15 +215,6 @@ export default function Login() {
             </div>
 
           </form>
-        </div>
-
-        {/* Footer */}
-        <div className={clsx(
-          'mt-4 flex justify-between text-sm font-mono animate-fade-up-4',
-          isDark ? 'text-ink-muted' : 'text-gray-400'
-        )}>
-          <span>Internal use only</span>
-          <span>JWT · 8h session</span>
         </div>
       </div>
 

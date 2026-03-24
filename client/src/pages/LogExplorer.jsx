@@ -16,7 +16,7 @@ import FilterChips        from '../components/explorer/FilterChips'
 import LogTable           from '../components/explorer/LogTable'
 import PaginationControls from '../components/explorer/PaginationControls'
 
-import { DRILL_DOWN_KEYS } from '../lib/explorerHelpers'
+import { DRILL_DOWN_KEYS, parseSearchToFilters } from '../lib/explorerHelpers'
 
 // Phase: add more explorer sub-components here as needed
 // e.g. import SavedSearches from '../components/explorer/SavedSearches'
@@ -111,7 +111,7 @@ export default function LogExplorer() {
     setTimeRange(range)
     setDrillFilters(filters)
     setSearchInput(searchText)
-    setActiveSearch(searchText)
+    setActiveSearch('')
     setCursors([null])
     setCurrentPage(0)
     fetchLogs('', range, null, filters)
@@ -119,13 +119,13 @@ export default function LogExplorer() {
 
   // ── Search handlers ────────────────────────────────────────────────────
   const handleSearch = () => {
-    // Replace: manual search clears all drill-down filters
-    setDrillFilters({})
-    setActiveSearch(searchInput)
-    setCursors([null])
-    setCurrentPage(0)
-    fetchLogs(searchInput, timeRange, null, {})
-  }
+  const { filters, freetext } = parseSearchToFilters(searchInput)
+  setDrillFilters(filters)
+  setActiveSearch(freetext)
+  setCursors([null])
+  setCurrentPage(0)
+  fetchLogs(freetext, timeRange, null, filters)
+}
 
   const handleClear = () => {
     setSearchInput('')
@@ -137,11 +137,13 @@ export default function LogExplorer() {
   }
 
   const handleRangeChange = (r) => {
-    setTimeRange(r)
-    setCursors([null])
-    setCurrentPage(0)
-    fetchLogs(activeSearch, r, null, drillFilters)
-  }
+  setTimeRange(r)
+  setCursors([null])
+  setCurrentPage(0)
+  // pass current drillFilters so structured filters survive a range switch
+  const { filters, freetext } = parseSearchToFilters(searchInput)
+  fetchLogs(freetext, r, null, filters)
+}
 
   // Remove a single drill-down filter chip
   const removeFilter = (key) => {

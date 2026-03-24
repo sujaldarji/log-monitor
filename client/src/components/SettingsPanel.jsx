@@ -4,7 +4,7 @@ import LightModeIcon  from '@mui/icons-material/LightMode'
 import DarkModeIcon   from '@mui/icons-material/DarkMode'
 import AcUnitIcon     from '@mui/icons-material/AcUnit'          // snowflake
 import CloseIcon      from '@mui/icons-material/Close'
-import { useUIStore } from '../store/uiStore'
+import { useUIStore } from '../store/uistore'
 import clsx           from 'clsx'
 
 /**

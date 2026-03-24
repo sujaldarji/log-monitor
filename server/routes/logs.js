@@ -72,21 +72,20 @@ const getTimeRange = (range = '15m') => {
 // MODE 1 takes priority — if any structured filter is present,
 // freetext search is ignored (Replace behavior)
 const buildQuery = (params, from, now) => {
-  const { search, hostname, channel, event_id, severity } = params
+  const { search, hostname, channel, event_id, event_type, severity } = params
 
   const timeFilter = {
     range: { event_time: { gte: from, lte: now, format: 'epoch_millis' } }
   }
 
   const filters = [timeFilter]
-
-  // ── MODE 1: structured drill-down filters ────────────────────────────────
-  const hasStructured = hostname || channel || event_id || severity
+const hasStructured = hostname || channel || event_id || event_type || severity  // ← add
 
   if (hasStructured) {
-    if (hostname)  filters.push({ term: { hostname } })
-    if (channel)   filters.push({ term: { channel: channel.toLowerCase() } })
-    if (severity)  filters.push({ term: { severity: severity.toLowerCase() } })
+    if (hostname)   filters.push({ term: { hostname } })
+    if (channel)    filters.push({ term: { channel:    channel.toLowerCase() } })
+    if (severity)   filters.push({ term: { severity:   severity.toLowerCase() } })
+    if (event_type) filters.push({ term: { event_type: event_type.toLowerCase() } })  // ← add
     if (event_id) {
       const num = parseInt(event_id, 10)
       if (!isNaN(num)) filters.push({ term: { event_id: num } })
@@ -158,7 +157,7 @@ router.get('/', async (req, res) => {
       size     = PAGE_SIZE,
       after    = null,
       // structured drill-down filters
-      hostname, channel, event_id, severity,
+      hostname, channel, event_id, event_type, severity,
     } = req.query
 
     const pageSize      = Math.min(parseInt(size, 10) || PAGE_SIZE, MAX_SIZE)
@@ -169,7 +168,7 @@ router.get('/', async (req, res) => {
     }
 
     const index = getIndices(from, now)
-    const query = buildQuery({ search, hostname, channel, event_id, severity }, from, now)
+    const query = buildQuery({ search, hostname, channel, event_id, event_type, severity }, from, now)
 
     const body = {
       size:    pageSize,

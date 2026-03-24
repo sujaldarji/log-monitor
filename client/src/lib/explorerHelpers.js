@@ -53,8 +53,29 @@ export const exportCSV = (logs) => {
   URL.revokeObjectURL(url)
 }
 
-// ── Drill-down filter keys accepted from URL params ─────────────────────────
-export const DRILL_DOWN_KEYS = ['hostname', 'channel', 'event_id', 'severity']
+// ── Drill-down filter keys accepted from URL params ────────────────────────
+export const DRILL_DOWN_KEYS = ['hostname', 'channel', 'event_id', 'event_type', 'severity']
+
+// ── Parse a search string into structured filters + leftover freetext ──────
+// "hostname:PC-1 channel:security login failure"
+// → { filters: { hostname:'PC-1', channel:'security' }, freetext: 'login failure' }
+const FILTER_KEY_SET = new Set(DRILL_DOWN_KEYS)
+
+export const parseSearchToFilters = (input = '') => {
+  const filters = {}
+  const freetext = []
+
+  for (const token of input.trim().split(/\s+/).filter(Boolean)) {
+    const m = token.match(/^(\w+):(.+)$/)
+    if (m && FILTER_KEY_SET.has(m[1])) {
+      filters[m[1]] = m[2]
+    } else {
+      freetext.push(token)
+    }
+  }
+
+  return { filters, freetext: freetext.join(' ') }
+}
 
 // ── Time range options ──────────────────────────────────────────────────────
 export const TIME_RANGES = [
