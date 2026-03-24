@@ -8,6 +8,7 @@ const LABELS = {
   '1h':  'last 1 hour',
   '6h':  'last 6 hours',
   '24h': 'last 24 hours',
+  '7d': 'last 7 days'
 }
 
 const psBarOption = (isDark, data, timeRange) => {

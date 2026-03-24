@@ -184,6 +184,11 @@ export default function Dashboard() {
               <option value="1h">Last 1 hour</option>
               <option value="6h">Last 6 hours</option>
               <option value="24h">Last 24 hours</option>
+
+              {/* separator */}
+              <option disabled>Long range</option>
+
+              <option value="7d">Last 7 days</option>
             </select>
 
             {/* Phase 2.1 ✅ — live/pause toggle */}

@@ -12,6 +12,7 @@ const RANGE_MAP = {
   '1h':  60 * 60 * 1000,
   '6h':  6  * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
 }
 
 const getTimeRange = (range = '15m') => {
@@ -27,6 +28,7 @@ const BUCKET = {
   '1h':  '5m',
   '6h':  '15m',
   '24h': '1h',
+  '7d': '6h',
 }
 
 // ── ES aggregation helper ──────────────────────────────────────────────────
@@ -39,7 +41,7 @@ const esAgg = async (index, query) => {
 const getMockLogRate = (range = '15m') => {
   const now      = Date.now()
   const duration = RANGE_MAP[range] || RANGE_MAP['15m']
-  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000, '7d':  21600000, }[range] || 60000
   const count    = Math.floor(duration / interval)
   return Array.from({ length: count }, (_, i) => ({
     time:  new Date(now - (count - i) * interval).toISOString(),
@@ -50,7 +52,7 @@ const getMockLogRate = (range = '15m') => {
 const getMockErrors = (range = '15m') => {
   const now      = Date.now()
   const duration = RANGE_MAP[range] || RANGE_MAP['15m']
-  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+  const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000, '7d':  21600000, }[range] || 60000
   const count    = Math.floor(duration / interval)
   return Array.from({ length: count }, (_, i) => ({
     time:  new Date(now - (count - i) * interval).toISOString(),
@@ -427,7 +429,7 @@ router.get('/login-failure-rate', async (req, res) => {
   if (MOCK) {
     const now      = Date.now()
     const duration = RANGE_MAP[range] || RANGE_MAP['15m']
-    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000, '7d':  21600000, }[range] || 60000
     const count    = Math.floor(duration / interval)
     return res.json({
       data: Array.from({ length: count }, (_, i) => ({
@@ -483,7 +485,7 @@ router.get('/powershell-activity', async (req, res) => {
   if (MOCK) {
     const now      = Date.now()
     const duration = RANGE_MAP[range] || RANGE_MAP['15m']
-    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000 }[range] || 60000
+    const interval = { '15m': 60000, '1h': 300000, '6h': 900000, '24h': 3600000,'7d':  21600000, }[range] || 60000
     const count    = Math.floor(duration / interval)
     return res.json({
       data: Array.from({ length: count }, (_, i) => ({

@@ -28,6 +28,7 @@ const PREV_LABEL = {
   '1h':  'vs prev hour',
   '6h':  'vs prev 6 hours',
   '24h': 'vs yesterday',
+  '7d':  'vs last 7 days'
 }
 
 const Tile = ({ isDark, label, value, accent, trend }) => (
