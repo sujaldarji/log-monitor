@@ -54,7 +54,8 @@ const psBarOption = (isDark, data, timeRange) => {
           type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
             { offset: 0, color: C.purple },
-            { offset: 1, color: C.purple + '60' },
+            { offset: 0.6, color: C.purple },
+            { offset: 1, color: C.purple + 'dd' },
           ]
         },
         borderRadius: [2, 2, 0, 0],

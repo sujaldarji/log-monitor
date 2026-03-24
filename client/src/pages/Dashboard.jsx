@@ -23,6 +23,7 @@ import LoginFailureRateChart   from '../components/dashboard/LoginFailureRateCha
 import PowerShellActivityChart from '../components/dashboard/PowerShellActivityChart'
 import TopEventIdsChart          from '../components/dashboard/TopEventIdsChart'
 import SeverityDistributionChart      from '../components/dashboard/SeverityDistributionChart'
+import ChannelSeverityChart      from '../components/dashboard/ChannelSeverityChart'
 
 import MetricsStrip      from '../components/dashboard/MetricsStrip'
 import RecentLogsTable   from '../components/dashboard/RecentLogsTable'
@@ -292,7 +293,12 @@ export default function Dashboard() {
           <SeverityDistributionChart isDark={isDark} {...severityDist} timeRange={timeRange} />
         </div>
 
-        {/* Phase 5 ✅ — recent errors/critical table, between charts and index size */}
+        {/* Row 5: Channel × Severity (full width) */}
+        <div className="mb-4 xl:mb-6">
+          <ChannelSeverityChart isDark={isDark} {...channelSeverity} timeRange={timeRange} />
+        </div>
+
+        {/* Phase 6 ✅ — recent errors/critical table, between charts and index size */}
         <div className="mb-4 xl:mb-6">
           <RecentLogsTable
             isDark={isDark}
@@ -304,7 +310,7 @@ export default function Dashboard() {
         </div>
 
 
-        {/* ── Row 6: Index Size — fixed, not tied to timeRange ─────────── */}
+        {/* ── Row 7: Index Size — fixed, not tied to timeRange ─────────── */}
         <IndexSizeChart isDark={isDark} {...indexSize} />
 
       </div>

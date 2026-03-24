@@ -17,9 +17,9 @@ export const ax = (isDark) => ({
 
 // Severity colors — shared across all charts for consistency
 export const SEVERITY_COLORS = {
-  critical:    '#ef4444',
+  critical:    '#dc2626',
   error:       '#f97316',
-  warning:     '#f59e0b',
+  warning:     '#eab308', 
   information: '#64748b',
 }
 
